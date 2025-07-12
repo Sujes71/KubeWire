@@ -1,0 +1,18 @@
+# KubeWire Requirements
+# Core dependencies for the Kubernetes port forwarding tool
+
+# YAML processing for configuration files
+PyYAML>=6.0.1
+
+# Async support (included in Python 3.7+, but explicit for clarity)
+# asyncio is part of the standard library
+
+# Note: kubectl is required to be installed separately on the system
+# This tool depends on the kubectl binary being available in PATH
+
+# Development dependencies (optional, for development/testing)
+# pytest>=7.0.0
+# pytest-asyncio>=0.21.0
+# black>=22.0.0
+# flake8>=4.0.0
+# mypy>=0.991
