@@ -1,7 +1,7 @@
 # ⚡ KubeWire
 
 <p align="left">
-  <img src="logo.png" alt="KubeWire Logo" width="120"/>
+  <img src="logo.png" alt="KubeWire Logo" width="200"/>
 </p>
 
 > Terminal-based port-forwarding for Kubernetes services.  
