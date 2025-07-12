@@ -1,9 +1,8 @@
-from datetime import datetime
 import asyncio
+from datetime import datetime
 
 from config.config_manager import ConfigManager
-from models.models import ContextStatus
-from pods.pod_ui import PodUI
+
 
 class TUI:
     def __init__(self, contexts, context_statuses=None):
@@ -18,7 +17,7 @@ class TUI:
             print("❌ No contexts configured or discovered.")
             return
 
-        print("🚀 KubeWire - Kubernetes Port Forward Manager")
+        print("\n🚀 KubeWire - Kubernetes Port Forward Manager")
         print("=" * 50)
 
         accessible_contexts = [ctx for ctx in self.contexts.keys()]

@@ -1,11 +1,13 @@
-from pathlib import Path
-import yaml
 import os
+from pathlib import Path
 from typing import Tuple, Dict, List
 
-from pods import Pod, PodUI
-from models.models import ContextStatus
+import yaml
+
 from k8s.discovery import KubernetesDiscovery
+from models.models import ContextStatus
+from pods import Pod, PodUI
+
 
 class ConfigManager:
     @staticmethod
@@ -85,9 +87,9 @@ class ConfigManager:
             config_file.parent.mkdir(parents=True, exist_ok=True)
             with open(config_file, 'w') as f:
                 yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
-            print(f"\n💾 Configuration saved to {config_file}")
+            print(f"\n💾 Configuration saved to {config_file}\n")
         except Exception as e:
-            print(f"❌ Failed to save configuration: {e}")
+            print(f"\n❌ Failed to save configuration: {e}\n")
 
     @staticmethod
     def read_config() -> Dict[str, List[PodUI]]:

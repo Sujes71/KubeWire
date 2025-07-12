@@ -4,6 +4,7 @@ import sys
 from config.config_manager import ConfigManager
 from ui.tui import TUI
 
+
 async def main():
     try:
         print("🔧 Loading configuration...")
@@ -20,7 +21,7 @@ async def main():
         inaccessible_count = len([s for s in context_statuses if not s.accessible])
 
         if accessible_count > 0:
-            print(f"✅ Found {accessible_count} accessible context(s)\n")
+            print(f"✅ Found {accessible_count} accessible context(s)")
         if inaccessible_count > 0:
             print(f"⚠️  Found {inaccessible_count} inaccessible context(s)")
         if accessible_count == 0:

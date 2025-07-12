@@ -1,8 +1,9 @@
+import asyncio
 import socket
 import subprocess
-import asyncio
 
 from pods.pod import Pod
+
 
 class PodUI:
     def __init__(self, pod: Pod):
