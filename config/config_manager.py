@@ -87,9 +87,9 @@ class ConfigManager:
             config_file.parent.mkdir(parents=True, exist_ok=True)
             with open(config_file, 'w') as f:
                 yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
-            print(f"\n💾 Configuration saved to {config_file}\n")
+            print(f"\n💾 Configuration saved to {config_file}")
         except Exception as e:
-            print(f"\n❌ Failed to save configuration: {e}\n")
+            print(f"\n❌ Failed to save configuration: {e}")
 
     @staticmethod
     def read_config() -> Dict[str, List[PodUI]]:

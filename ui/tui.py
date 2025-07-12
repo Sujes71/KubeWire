@@ -44,7 +44,7 @@ class TUI:
                 await self.select_context()
 
     async def select_context(self):
-        print(f"🌍 Available Environments/Contexts:")
+        print(f"\n🌍 Available Environments/Contexts:")
         print("-" * 40)
 
         accessible_contexts = list(self.contexts.keys())
@@ -98,9 +98,9 @@ class TUI:
             self.current_pods = []
             if new_contexts:
                 ConfigManager.save_discovered_config(new_contexts)
-                print("✅ Configuration refreshed!\n")
+                print("✅ Configuration refreshed!")
             else:
-                print("⚠️  No accessible contexts found\n")
+                print("⚠️  No accessible contexts found")
         elif choice == 'b':
             if self.current_context:
                 print("🔄 Returning to current context...")
@@ -125,6 +125,9 @@ class TUI:
                     elif "Access denied" in selected_context['error']:
                         print("   - Check your cluster permissions")
                         print("   - Verify your kubectl configuration")
+                    elif "Unknown error" in selected_context['error']:
+                        print("   - Unknown")
+
                     await asyncio.sleep(3)
                     return
                 new_context = selected_context['name']
