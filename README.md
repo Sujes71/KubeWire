@@ -1,5 +1,7 @@
 # ⚡ Kubewire
 
+![Kubewire Logo](logo.png)
+
 > Terminal-based port-forwarding for Kubernetes services.  
 > Auto-discovers clusters, namespaces, and services via `kubectl`.  
 > Fast tunnels. Clean interface. Zero config.
