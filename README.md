@@ -1,6 +1,8 @@
-# ⚡ Kubewire
+# ⚡ KubeWire
 
-![Kubewire Logo](logo.png)
+<p align="left">
+  <img src="logo.png" alt="KubeWire Logo" width="120"/>
+</p>
 
 > Terminal-based port-forwarding for Kubernetes services.  
 > Auto-discovers clusters, namespaces, and services via `kubectl`.  
