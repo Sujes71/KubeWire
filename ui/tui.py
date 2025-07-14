@@ -8,6 +8,7 @@ from datetime import datetime
 
 from config.config_manager import ConfigManager
 from pods.pod_monitor import PodMonitor
+from pods.sound_notifier import SoundNotifier
 
 
 class TUI:
@@ -26,6 +27,10 @@ class TUI:
         self.current_input_prompt = ""
         self.refresh_requested = threading.Event()
         self.input_interrupted = False
+        self.sound_notifier = SoundNotifier()
+        self.sound_enabled = self.sound_notifier.is_sound_available()
+
+        self.notified_disconnected_pods = set()
 
         for context_pods in self.contexts.values():
             for pod in context_pods:
@@ -186,6 +191,7 @@ class TUI:
             self.context_statuses = new_statuses
             self.current_context = None
             self.current_pods = []
+            self.notified_disconnected_pods.clear()
             if new_contexts:
                 ConfigManager.save_discovered_config(new_contexts)
                 print("✅ Configuration refreshed!")
@@ -226,6 +232,7 @@ class TUI:
                         self.stop_current_context()
                     self.current_context = new_context
                     self.current_pods = self.contexts[new_context]
+                    self.notified_disconnected_pods.clear()
                     for pod in self.current_pods:
                         pod._was_running = pod.is_running()
                     self.pod_monitor.start_monitoring()
@@ -243,6 +250,7 @@ class TUI:
     def show_service_menu(self):
         os.system('cls' if os.name == 'nt' else 'clear')
         print(f"\n🎯 Context: {self.current_context}")
+
         print(f"📋 Available Services ({datetime.now().strftime('%H:%M:%S')}):")
         print("-" * 50)
 
@@ -254,12 +262,19 @@ class TUI:
             if is_failed:
                 status_icon = "💥"
                 status_text = "DISCONNECTED"
+
+                if self.sound_enabled and pod_id not in self.notified_disconnected_pods:
+                    self.notified_disconnected_pods.add(pod_id)
+                    threading.Thread(target=self.sound_notifier.play_disconnect_sound, daemon=True).start()
+
             elif is_running:
                 status_icon = "🟢"
                 status_text = "RUNNING"
+                self.notified_disconnected_pods.discard(pod_id)
             else:
                 status_icon = "🔴"
                 status_text = "STOPPED"
+                self.notified_disconnected_pods.discard(pod_id)
 
             print(f"{i:2d}. {pod.get_service()}:{pod.get_port()} [{pod.get_namespace()}] - {status_icon} {status_text}")
 
@@ -299,6 +314,7 @@ class TUI:
                 self.stop_current_context()
                 self.contexts = new_contexts
                 self.context_statuses = new_statuses
+                self.notified_disconnected_pods.clear()
                 if self.current_context in new_contexts:
                     self.current_pods = new_contexts[self.current_context]
                     for pod in self.current_pods:
@@ -326,6 +342,7 @@ class TUI:
                 pod._was_running = True
                 pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
                 self.pod_monitor.mark_user_started(pod_id)
+                self.notified_disconnected_pods.discard(pod_id)
                 await asyncio.sleep(0.1)
 
             print(f"\r✅ Started {len(stopped_pods)} service(s) successfully!{' '*20}")
@@ -343,6 +360,7 @@ class TUI:
                 print(f"\r🛑 Stopping {i}/{len(running_pods)}: {pod.get_service()}...", end="", flush=True)
                 pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
                 self.pod_monitor.mark_user_stopped(pod_id)
+                self.notified_disconnected_pods.discard(pod_id)
                 await asyncio.sleep(0.1)
 
             self.stop_current_context()
@@ -360,12 +378,14 @@ class TUI:
                     pod.stop()
                     pod._was_running = False
                     self.pod_monitor.mark_user_stopped(pod_id)
+                    self.notified_disconnected_pods.discard(pod_id)
                     print(f"\r✅ Stopped {service_name} successfully!{' '*20}")
                 else:
                     print(f"🚀 Starting {service_name}...", end="", flush=True)
                     if await pod.start():
                         pod._was_running = True
                         self.pod_monitor.mark_user_started(pod_id)
+                        self.notified_disconnected_pods.discard(pod_id)
                         print(f"\r✅ Started {service_name} successfully!{' '*20}")
                     else:
                         print(f"\r❌ Failed to start {service_name}!{' '*20}")
@@ -505,7 +525,19 @@ class TUI:
         self.stop_all_contexts()
 
     def notify_failures(self, failed_pods):
-        pass
+        """Método llamado por el monitor cuando detecta fallos"""
+        if self.sound_enabled and failed_pods:
+            new_failures = []
+            for pod_id in failed_pods:
+                if pod_id not in self.notified_disconnected_pods:
+                    new_failures.append(pod_id)
+                    self.notified_disconnected_pods.add(pod_id)
+
+            if new_failures:
+                threading.Thread(target=self.sound_notifier.play_disconnect_sound, daemon=True).start()
 
     def trigger_refresh_with_failures(self, failed_pods):
-        pass
+        """Método llamado por el monitor para refrescar la pantalla con fallos"""
+        if failed_pods:
+            self.notify_failures(failed_pods)
+        self.trigger_display_update()
