@@ -165,11 +165,11 @@ class TUI:
                 print(f"{current_marker}{i}. 🔴 {ctx_info['name']} (⚠️  {ctx_info['error']})")
 
         print("\n🎮 Commands:")
-        print("  1-N : Select environment")
+        print("  1-N      : Select environment")
         if self.current_context:
-            print("  b   : Back to current context")
-        print("  r   : Refresh/Re-discover")
-        print("  q   : Quit")
+            print("  back     : Back to current context")
+        print("  refresh  : Refresh/Re-discover")
+        print("  quit     : Quit")
 
         choice = input("\nSelect environment: ").strip().lower()
 
@@ -189,7 +189,7 @@ class TUI:
                 print("✅ Configuration refreshed!")
             else:
                 print("⚠️  No accessible contexts found")
-        elif choice == 'b':
+        elif choice == 'b' or choice == 'back':
             if self.current_context:
                 self.pod_monitor.start_monitoring()
                 os.system('cls' if os.name == 'nt' else 'clear')
@@ -267,7 +267,7 @@ class TUI:
         print("  stop     : Stop all services")
         print("  env      : Change environment")
         print("  refresh  : Re-discover services")
-        print("  q        : Quit")
+        print("  quit     : Quit")
 
     async def handle_service_choice(self, choice: str):
         if choice is None:
@@ -279,11 +279,11 @@ class TUI:
             print("👋 Stopping all services and exiting...\n")
             self.stop_all_contexts()
             self.running = False
-        elif choice == 'env':
+        elif choice == 'env' or choice == 'e':
             print("🔄 Switching to environment selection...")
             await asyncio.sleep(0.5)
             await self.select_context()
-        elif choice == 'refresh':
+        elif choice == 'refresh' or choice == 'r':
             print("🔄 Re-discovering services...", end="", flush=True)
             new_contexts, new_statuses = ConfigManager.discover_config()
             if new_contexts:
