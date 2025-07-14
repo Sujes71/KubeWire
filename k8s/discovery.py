@@ -64,7 +64,6 @@ class KubernetesDiscovery:
         else:
             if "provide credentials" in output.lower() or "logged in" in output.lower():
                 print(f"   ❌ Authentication required for context: {context}")
-                print(f"   💡 Please authenticate with your cluster provider and update your kubeconfig")
             else:
                 print(f"   ❌ Failed to get namespaces: {output}")
             return []
@@ -99,7 +98,6 @@ class KubernetesDiscovery:
         else:
             if "provide credentials" in output.lower() or "logged in" in output.lower():
                 print(f"   ❌ Authentication required for context: {context}")
-                print(f"   💡 Please authenticate with your cluster provider and update your kubeconfig")
             else:
                 print(f"   ❌ Failed to get services: {output}")
             return []

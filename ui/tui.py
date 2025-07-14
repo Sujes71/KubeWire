@@ -1,8 +1,87 @@
 import asyncio
+import os
+import threading
+import time
 from datetime import datetime
+from typing import Set
 
 from config.config_manager import ConfigManager
 
+
+class PodMonitor:
+    def __init__(self, tui_instance):
+        self.tui = tui_instance
+        self.monitoring = False
+        self.monitor_thread = None
+        self.check_interval = 5
+        self.recently_failed_pods: Set[str] = set()
+        self.lock = threading.Lock()
+        self.user_stopped_pods: Set[str] = set()
+
+    def start_monitoring(self):
+        if self.monitoring:
+            return
+        self.monitoring = True
+        self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self.monitor_thread.start()
+
+    def stop_monitoring(self):
+        self.monitoring = False
+        if self.monitor_thread:
+            self.monitor_thread.join(timeout=1)
+
+    def _monitor_loop(self):
+        while self.monitoring:
+            try:
+                self._check_pods_status()
+                time.sleep(self.check_interval)
+            except Exception as e:
+                print(f"❌ Error in pod monitor: {e}")
+                time.sleep(self.check_interval)
+
+    def _check_pods_status(self):
+        if not self.tui.current_pods:
+            return
+
+        status_changed = False
+        failed_pods = []
+
+        with self.lock:
+            for pod in self.tui.current_pods:
+                pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
+                current_running = pod.is_running()
+                was_running = getattr(pod, '_was_running', False)
+
+                if pod_id not in self.user_stopped_pods:
+                    if was_running and not current_running:
+                        if pod_id not in self.recently_failed_pods:
+                            self.recently_failed_pods.add(pod_id)
+                            failed_pods.append(pod)
+                            status_changed = True
+
+                if was_running != current_running:
+                    status_changed = True
+
+                pod._was_running = current_running
+
+                if current_running and pod_id in self.recently_failed_pods:
+                    self.recently_failed_pods.remove(pod_id)
+                    self.user_stopped_pods.discard(pod_id)
+                    status_changed = True
+
+        # Activar refresh cuando hay cambios
+        if status_changed and self.tui.current_context:
+            self.tui.request_refresh()
+
+    def mark_user_stopped(self, pod_id: str):
+        with self.lock:
+            self.user_stopped_pods.add(pod_id)
+            self.recently_failed_pods.discard(pod_id)
+
+    def mark_user_started(self, pod_id: str):
+        with self.lock:
+            self.user_stopped_pods.discard(pod_id)
+            self.recently_failed_pods.discard(pod_id)
 
 class TUI:
     def __init__(self, contexts, context_statuses=None):
@@ -11,6 +90,42 @@ class TUI:
         self.current_context = None
         self.current_pods = []
         self.running = True
+        self.pod_monitor = PodMonitor(self)
+        self.display_update_flag = threading.Event()
+        self.input_lock = threading.Lock()
+        self.in_service_menu = False
+        self.last_alert_time = 0
+        self.alert_cooldown = 10
+        self.current_input_prompt = ""
+        self.refresh_requested = threading.Event()  # Nuevo evento para refresh
+        self.input_interrupted = False
+
+        for context_pods in self.contexts.values():
+            for pod in context_pods:
+                pod._was_running = False
+
+    def request_refresh(self):
+        """Solicita un refresh de la pantalla"""
+        self.refresh_requested.set()
+
+    def trigger_display_update(self):
+        if self.in_service_menu:
+            self.display_update_flag.set()
+
+    def _display_update_thread(self):
+        while self.running:
+            if self.display_update_flag.wait(timeout=1):
+                self.display_update_flag.clear()
+                if self.in_service_menu and self.current_context:
+                    time.sleep(0.5)
+                    with self.input_lock:
+                        try:
+                            print("\r" + " " * 80 + "\r", end="")
+                            print("\033[A" * 2, end="")
+                            self.show_service_menu()
+                            print(f"{self.current_input_prompt}", end="", flush=True)
+                        except:
+                            pass
 
     async def run(self):
         if not self.contexts and not self.context_statuses:
@@ -20,6 +135,9 @@ class TUI:
         print("\n🚀 KubeWire - Kubernetes Port Forward Manager")
         print("=" * 50)
 
+        display_thread = threading.Thread(target=self._display_update_thread, daemon=True)
+        display_thread.start()
+
         accessible_contexts = [ctx for ctx in self.contexts.keys()]
         if len(accessible_contexts) == 1:
             self.current_context = accessible_contexts[0]
@@ -28,22 +146,77 @@ class TUI:
         else:
             await self.select_context()
 
-        while self.running:
-            if self.current_context:
+        self.pod_monitor.start_monitoring()
+
+        try:
+            while self.running:
+                if self.current_context:
+                    self.in_service_menu = True
+                    self.show_service_menu()
+
+                    with self.input_lock:
+                        self.current_input_prompt = "\nEnter your choice: "
+                        print(self.current_input_prompt, end="", flush=True)
+
+                        # Usar input mejorado que maneja interrupciones
+                        choice = self._get_user_input_with_refresh()
+
+                    try:
+                        await self.handle_service_choice(choice)
+                    except KeyboardInterrupt:
+                        print("\n👋 Shutting down...")
+                        self.stop_all()
+                        self.running = False
+                    except Exception as e:
+                        print(f"❌ Error: {e}")
+                else:
+                    self.in_service_menu = False
+                    await self.select_context()
+        finally:
+            self.pod_monitor.stop_monitoring()
+
+    def _get_user_input_with_refresh(self):
+        """Método que maneja input del usuario con refresh automático"""
+        self.refresh_requested.clear()  # Limpiar el evento
+
+        # Usar threading para input no bloqueante
+        input_result = [None]
+        input_ready = threading.Event()
+
+        def get_input():
+            try:
+                result = input().strip()
+                input_result[0] = result
+                input_ready.set()
+            except (EOFError, KeyboardInterrupt):
+                input_ready.set()
+
+        input_thread = threading.Thread(target=get_input, daemon=True)
+        input_thread.start()
+
+        # Bucle que espera input o refresh
+        while True:
+            # Esperar por input o refresh con timeout
+            if input_ready.wait(timeout=0.1):
+                # Input recibido
+                return input_result[0] if input_result[0] is not None else ""
+
+            # Verificar si se solicitó refresh
+            if self.refresh_requested.is_set():
+                self.refresh_requested.clear()
+                # Refrescar la pantalla y continuar esperando input
                 self.show_service_menu()
-                choice = input("\nEnter your choice: ").strip()
-                try:
-                    await self.handle_service_choice(choice)
-                except KeyboardInterrupt:
-                    print("\n👋 Shutting down...")
-                    self.stop_all()
-                    self.running = False
-                except Exception as e:
-                    print(f"❌ Error: {e}")
-            else:
-                await self.select_context()
+                print(self.current_input_prompt, end="", flush=True)
+
+            # Verificar si el hilo de input terminó sin resultado
+            if not input_thread.is_alive() and not input_ready.is_set():
+                return ""
 
     async def select_context(self):
+        self.pod_monitor.stop_monitoring()
+        self.in_service_menu = False
+        os.system('cls' if os.name == 'nt' else 'clear')
+
         print(f"\n🌍 Available Environments/Contexts:")
         print("-" * 40)
 
@@ -103,7 +276,8 @@ class TUI:
                 print("⚠️  No accessible contexts found")
         elif choice == 'b':
             if self.current_context:
-                print("🔄 Returning to current context...")
+                self.pod_monitor.start_monitoring()
+                os.system('cls' if os.name == 'nt' else 'clear')
                 return
             else:
                 print("❌ Invalid choice")
@@ -127,7 +301,6 @@ class TUI:
                         print("   - Verify your kubectl configuration")
                     elif "Unknown error" in selected_context['error']:
                         print("   - Unknown")
-
                     await asyncio.sleep(3)
                     return
                 new_context = selected_context['name']
@@ -136,10 +309,12 @@ class TUI:
                         self.stop_current_context()
                     self.current_context = new_context
                     self.current_pods = self.contexts[new_context]
-                    print(f"🎯 Switched to context: {self.current_context}")
+                    for pod in self.current_pods:
+                        pod._was_running = pod.is_running()
+                    self.pod_monitor.start_monitoring()
                     await asyncio.sleep(1)
+                    os.system('cls' if os.name == 'nt' else 'clear')
                 else:
-                    print(f"📍 Already in context: {self.current_context}")
                     await asyncio.sleep(1)
             else:
                 print("❌ Invalid environment number")
@@ -149,12 +324,28 @@ class TUI:
             await asyncio.sleep(1)
 
     def show_service_menu(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
         print(f"\n🎯 Context: {self.current_context}")
         print(f"📋 Available Services ({datetime.now().strftime('%H:%M:%S')}):")
         print("-" * 50)
+
         for i, pod in enumerate(self.current_pods, 1):
-            status = "🟢 RUNNING" if pod.is_running() else "🔴 STOPPED"
-            print(f"{i:2d}. {pod.get_service()}:{pod.get_port()} [{pod.get_namespace()}] - {status}")
+            pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
+            is_running = pod.is_running()
+            is_failed = pod_id in self.pod_monitor.recently_failed_pods
+
+            if is_failed:
+                status_icon = "💥"
+                status_text = "DISCONNECTED"
+            elif is_running:
+                status_icon = "🟢"
+                status_text = "RUNNING"
+            else:
+                status_icon = "🔴"
+                status_text = "STOPPED"
+
+            print(f"{i:2d}. {pod.get_service()}:{pod.get_port()} [{pod.get_namespace()}] - {status_icon} {status_text}")
+
         print("\n🎮 Commands:")
         print("  1-N      : Start/Stop specific service")
         print("  start    : Start all services")
@@ -164,7 +355,11 @@ class TUI:
         print("  q        : Quit")
 
     async def handle_service_choice(self, choice: str):
+        if choice is None:
+            choice = ""
+
         choice = choice.lower().strip()
+
         if choice == 'q' or choice == 'quit':
             print("👋 Stopping all services and exiting...\n")
             self.stop_all_contexts()
@@ -172,7 +367,6 @@ class TUI:
         elif choice == 'env':
             await self.select_context()
         elif choice == 'refresh':
-            print("🔄 Re-discovering services...\n")
             new_contexts, new_statuses = ConfigManager.discover_config()
             if new_contexts:
                 self.stop_current_context()
@@ -180,40 +374,47 @@ class TUI:
                 self.context_statuses = new_statuses
                 if self.current_context in new_contexts:
                     self.current_pods = new_contexts[self.current_context]
+                    for pod in self.current_pods:
+                        pod._was_running = pod.is_running()
                 else:
                     self.current_context = None
                     self.current_pods = []
                 ConfigManager.save_discovered_config(new_contexts)
-                print("✅ Services refreshed!")
-            else:
-                print("❌ No accessible contexts found\n")
         elif choice == 'start':
-            print(f"🚀 Starting all services in {self.current_context}...\n")
-            success_count = 0
-            total_count = 0
             for pod in self.current_pods:
                 if not pod.is_running():
-                    total_count += 1
-                    if await pod.start():
-                        success_count += 1
-            print(f"📊 Summary: {success_count}/{total_count} services started successfully")
+                    await pod.start()
+                    pod._was_running = True
+                    pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
+                    self.pod_monitor.mark_user_started(pod_id)
         elif choice == 'stop':
-            print(f"🛑 Stopping all services in {self.current_context}...\n")
+            for pod in self.current_pods:
+                if pod.is_running():
+                    pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
+                    self.pod_monitor.mark_user_stopped(pod_id)
             self.stop_current_context()
         elif choice.isdigit():
             index = int(choice) - 1
             if 0 <= index < len(self.current_pods):
                 pod = self.current_pods[index]
+                pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
                 if pod.is_running():
                     pod.stop()
+                    pod._was_running = False
+                    self.pod_monitor.mark_user_stopped(pod_id)
                 else:
-                    await pod.start()
+                    if await pod.start():
+                        pod._was_running = True
+                        self.pod_monitor.mark_user_started(pod_id)
             else:
                 print("❌ Invalid service number")
+                await asyncio.sleep(1)
+        elif choice == "":
+            # Input vacío, no hacer nada (puede ser por refresh)
+            pass
         else:
             print("❌ Invalid choice")
-        if choice != 'status':
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
 
     def stop_current_context(self):
         if not self.current_pods:
@@ -221,12 +422,20 @@ class TUI:
         for pod in self.current_pods:
             if pod.is_running():
                 pod.stop()
+                pod._was_running = False
 
     def stop_all_contexts(self):
         for context_name, pods in self.contexts.items():
             for pod in pods:
                 if pod.is_running():
                     pod.stop()
+                    pod._was_running = False
 
     def stop_all(self):
         self.stop_all_contexts()
+
+    def notify_failures(self, failed_pods):
+        pass
+
+    def trigger_refresh_with_failures(self, failed_pods):
+        pass

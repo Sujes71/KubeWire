@@ -1,3 +1,4 @@
+# ================== Main ==================
 import asyncio
 import sys
 
@@ -7,12 +8,10 @@ from ui.tui import TUI
 
 async def main():
     try:
-        print("🔧 Loading configuration...")
         contexts = ConfigManager.read_config()
         context_statuses = []
 
         if not contexts:
-            print("🔍 No configuration file found. Auto-discovering...")
             contexts, context_statuses = ConfigManager.discover_config()
             if contexts:
                 ConfigManager.save_discovered_config(contexts)

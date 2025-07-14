@@ -46,7 +46,6 @@ class PodUI:
 
     async def start(self) -> bool:
         if self.is_running():
-            print(f"Process for {self.get_service()} is already running\n")
             return True
 
         cmd = [
@@ -58,11 +57,9 @@ class PodUI:
             f"{self.get_port()}:80"
         ]
 
-        print(f"Starting port-forward: {' '.join(cmd)}")
-
         if not self._is_port_available(self.get_port()):
-            print(f"❌ Port-forward failed for {self.get_service()}")
-            print(f"   Error: Local port {self.get_port()} is already in use. Cannot start port-forward.")
+            # Solo mostrar error si realmente es crítico
+            print(f"❌ Port {self.get_port()} is already in use for {self.get_service()}")
             return False
 
         if self.process and not self.is_running():
@@ -81,9 +78,9 @@ class PodUI:
             await asyncio.sleep(1.5)
 
             if self.is_running():
-                print(f"✅ Port-forward started for {self.get_service()}:{self.get_port()}")
                 return True
             else:
+                # Solo mostrar errores críticos
                 if self.process:
                     try:
                         stdout_data, stderr_data = self.process.communicate(timeout=1)
@@ -91,44 +88,30 @@ class PodUI:
                         self.process.kill()
                         stdout_data, stderr_data = self.process.communicate()
 
-                    print(f"❌ Port-forward failed for {self.get_service()}")
-
                     if stderr_data:
                         stderr_lower = stderr_data.lower()
+                        # Solo mostrar errores críticos que el usuario necesita saber
                         if "unable to listen on port" in stderr_lower:
-                            print(f"   Error: Local port {self.get_port()} is already in use. Cannot start port-forward.\n")
+                            print(f"❌ Port {self.get_port()} is already in use for {self.get_service()}")
                         elif "service" in stderr_lower and "not found" in stderr_lower:
-                            print(f"   Error: Service '{self.get_service()}' not found in namespace '{self.get_namespace()}'.\n")
-                        elif "no endpoints available" in stderr_lower:
-                            print(f"   Error: Service '{self.get_service()}' has no available endpoints. The pod may be down or not ready.\n")
-                        elif "connection refused" in stderr_lower or "unable to forward" in stderr_lower:
-                            print(f"   Error: Unable to connect to service '{self.get_service()}'. The pod may be down or not responding.\n")
+                            print(f"❌ Service '{self.get_service()}' not found in namespace '{self.get_namespace()}'")
                         elif "context" in stderr_lower and "not found" in stderr_lower:
-                            print(f"   Error: Kubernetes context not found. Please check your kubectl configuration.\n")
-                        elif "namespace" in stderr_lower and "not found" in stderr_lower:
-                            print(f"   Error: Namespace '{self.get_namespace()}' not found in the current context.\n")
-                        else:
-                            print(f"   Error: {stderr_data.strip()}\n")
-                    elif stdout_data:
-                        print(f"   Output: {stdout_data.strip()}\n")
-                    else:
-                        print(f"   Error: Unknown error occurred. The service '{self.get_service()}' may be down or unreachable.\n")
+                            print(f"❌ Kubernetes context not found. Check kubectl configuration.")
+                        elif "kubectl" in stderr_lower and "not found" in stderr_lower:
+                            print(f"❌ kubectl command not found. Please install kubectl.")
 
                 self.process = None
                 return False
 
         except FileNotFoundError:
-            print(f"❌ Port-forward failed for {self.get_service()}")
-            print(f"   Error: kubectl command not found. Please make sure kubectl is installed and in your PATH.\n")
+            print(f"❌ kubectl command not found. Please install kubectl.")
             return False
         except Exception as e:
-            print(f"❌ Port-forward failed for {self.get_service()}")
-            print(f"   Error: Unexpected error occurred: {e}\n")
+            print(f"❌ Unexpected error for {self.get_service()}: {e}")
             return False
 
     def stop(self) -> bool:
         if not self.is_running():
-            print(f"No running process for {self.get_service()}")
             return True
 
         try:
@@ -140,8 +123,7 @@ class PodUI:
                     self.process.kill()
                     self.process.wait()
                 self.process = None
-                print(f"🛑 Stopped port-forward for {self.get_service()}")
                 return True
         except Exception as e:
-            print(f"❌ Error stopping port-forward for {self.get_service()}: {e}")
+            print(f"❌ Error stopping {self.get_service()}: {e}")
             return False

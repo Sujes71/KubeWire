@@ -95,10 +95,8 @@ class ConfigManager:
     def read_config() -> Dict[str, List[PodUI]]:
         config_file = ConfigManager.get_config_path()
         if not config_file.exists():
-            print(f"📝 No configuration file found at {config_file}")
             return {}
 
-        print(f"Reading configuration from {config_file}")
         try:
             with open(config_file, 'r') as f:
                 content = f.read().strip()
@@ -124,9 +122,9 @@ class ConfigManager:
                                 port=pod_data['port']
                             )
                             context_pods.append(PodUI(pod))
-                    result[context_name] = context_pods  # ✅ Siempre asigna aunque esté vacío
+                    result[context_name] = context_pods
 
-                return result  # ✅ Añade este return explícito
+                return result
 
         except Exception as e:
             print(f"❌ Error reading config file: {e}")
