@@ -1,5 +1,7 @@
 import asyncio
 import os
+import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -263,6 +265,7 @@ class TUI:
 
         print("\n🎮 Commands:")
         print("  1-N      : Start/Stop specific service")
+        print("  l1-N     : Show logs for service (new window)")
         print("  start    : Start all services")
         print("  stop     : Stop all services")
         print("  env      : Change environment")
@@ -274,6 +277,12 @@ class TUI:
             choice = ""
 
         choice = choice.lower().strip()
+
+        if choice.startswith('l') and choice[1:].isdigit():
+            index = int(choice[1:]) - 1
+            if 0 <= index < len(self.current_pods):
+                await self.show_pod_logs(self.current_pods[index])
+                return
 
         if choice == 'q' or choice == 'quit':
             print("👋 Stopping all services and exiting...\n")
@@ -369,6 +378,113 @@ class TUI:
         else:
             print("❌ Invalid choice")
             await asyncio.sleep(1)
+
+    async def show_pod_logs(self, pod):
+        context = pod.get_context()
+        namespace = pod.get_namespace()
+        service = pod.get_service()
+
+        if self._is_stern_available():
+            cmd = f"stern -n {namespace} -l app={service} --since 1h --color always"
+            title = f"Logs: {service} (stern)"
+        else:
+            cmd = f"kubectl logs -n {namespace} -l app={service} --since=1h --tail=100 --follow"
+            title = f"Logs: {service} (kubectl)"
+
+        terminal_cmd = self._get_terminal_command(service, cmd, title)
+
+        if terminal_cmd:
+            try:
+                subprocess.Popen(terminal_cmd, shell=True)
+                print(f"📜 Opening logs for {service} in new window...")
+            except Exception as e:
+                print(f"❌ Failed to open logs: {e}")
+        else:
+            print("⚠️  Could not determine how to open new terminal window")
+
+        await asyncio.sleep(1)
+
+    def _is_stern_available(self) -> bool:
+        try:
+            subprocess.run(["stern", "--version"],
+                           check=True,
+                           stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE)
+            return True
+        except:
+            return False
+
+    def _get_terminal_command(self, service: str, cmd: str, title: str) -> str:
+        escaped_cmd = cmd.replace('"', '\\"')
+        escaped_title = title.replace('"', '\\"')
+
+        if sys.platform == "win32":
+            return f'''start wt -w 0 new-tab --title "Logs: {service}" powershell -NoExit -Command "{escaped_cmd}"'''
+
+        elif sys.platform == "darwin":
+            terminal_apps = []
+            for app in ["Warp", "iTerm", "Terminal"]:
+                if os.path.exists(f"/Applications/{app}.app"):
+                    terminal_apps.append(app)
+
+            if not terminal_apps:
+                print("❌ No se encontró ninguna aplicación de terminal instalada")
+                return ""
+
+            if "Warp" in terminal_apps:
+                return f"""
+    osascript -e 'tell application "Warp" to activate'
+    osascript -e 'delay 1'
+    osascript -e 'tell application "System Events" to tell process "Warp"
+        keystroke "n" using command down
+        delay 0.5
+        keystroke "{escaped_cmd}"
+        key code 36
+        keystroke "f" using {{command down, control down}}
+    end tell'
+    """
+            elif "iTerm" in terminal_apps:
+                return f"""
+    osascript -e 'tell application "iTerm"
+        activate
+        set newWindow to (create window with default profile)
+        tell current session of newWindow
+            write text "{escaped_cmd}"
+            set name to "{escaped_title}"
+        end tell
+        set fullscreen of newWindow to true
+    end tell'
+    """
+            else:
+                return f"""
+    osascript -e 'tell application "Terminal"
+        activate
+        do script "{escaped_cmd}"
+        delay 1
+    end tell'
+    osascript -e 'tell application "System Events" to tell process "Terminal"
+        set frontmost to true
+        keystroke "f" using {{command down, control down}}
+    end tell'
+    """
+        else:
+            return f"""
+    bash -c '
+    if command -v warp &>/dev/null; then
+        warp --title "{escaped_title}" --command "{escaped_cmd}" --fullscreen &
+    elif command -v gnome-terminal &>/dev/null; then
+        gnome-terminal --title="{escaped_title}" -- bash -c "{escaped_cmd}; exec bash" &
+        sleep 0.5
+        wmctrl -r "{escaped_title}" -b add,maximized_vert,maximized_horz
+    elif command -v konsole &>/dev/null; then
+        konsole --title "{escaped_title}" --fullscreen -e bash -c "{escaped_cmd}; exec bash" &
+    elif command -v xterm &>/dev/null; then
+        xterm -title "{escaped_title}" -geometry 132x45 -e "{escaped_cmd}" &
+    else
+        echo "No se encontró ningún terminal compatible" >&2
+    fi
+    '
+    """
 
     def stop_current_context(self):
         if not self.current_pods:
