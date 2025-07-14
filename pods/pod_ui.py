@@ -58,7 +58,6 @@ class PodUI:
         ]
 
         if not self._is_port_available(self.get_port()):
-            # Solo mostrar error si realmente es crítico
             print(f"❌ Port {self.get_port()} is already in use for {self.get_service()}")
             return False
 
@@ -80,7 +79,6 @@ class PodUI:
             if self.is_running():
                 return True
             else:
-                # Solo mostrar errores críticos
                 if self.process:
                     try:
                         stdout_data, stderr_data = self.process.communicate(timeout=1)
@@ -90,7 +88,6 @@ class PodUI:
 
                     if stderr_data:
                         stderr_lower = stderr_data.lower()
-                        # Solo mostrar errores críticos que el usuario necesita saber
                         if "unable to listen on port" in stderr_lower:
                             print(f"❌ Port {self.get_port()} is already in use for {self.get_service()}")
                         elif "service" in stderr_lower and "not found" in stderr_lower:

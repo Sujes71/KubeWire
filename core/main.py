@@ -1,4 +1,3 @@
-# ================== Main ==================
 import asyncio
 import sys
 
