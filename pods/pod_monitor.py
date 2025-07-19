@@ -76,3 +76,6 @@ class PodMonitor:
         with self.lock:
             self.user_stopped_pods.discard(pod_id)
             self.recently_failed_pods.discard(pod_id)
+
+    def stop(self):
+        self.stop_monitoring()

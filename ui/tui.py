@@ -11,7 +11,7 @@ from pods.pod_monitor import PodMonitor
 from pods.sound_notifier import SoundNotifier
 
 
-class TUI:
+class KubeWireTUI:
     def __init__(self, contexts, context_statuses=None):
         self.contexts = contexts
         self.context_statuses = context_statuses or []

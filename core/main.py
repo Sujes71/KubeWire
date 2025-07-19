@@ -2,10 +2,15 @@ import asyncio
 import sys
 
 from config.config_manager import ConfigManager
-from ui.tui import TUI
+from ui.tui import KubeWireTUI
 
+MODE = "gui"
 
-async def main():
+def _create_gui():
+    from ui.gui import KubeWireGUI
+    return KubeWireGUI()
+
+async def _create_tui():
     try:
         contexts = ConfigManager.read_config()
         context_statuses = []
@@ -31,15 +36,34 @@ async def main():
             print("   4. Create a manual config.yml file with your services")
             return
 
-        tui = TUI(contexts, context_statuses)
+        tui = KubeWireTUI(contexts, context_statuses)
         await tui.run()
 
     except KeyboardInterrupt:
         print("\n👋 Goodbye!")
     except Exception as e:
-        print(f"❌ Fatal error: {e}")
+        print(f"❌ Fatal error in TUI: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
+def main():
+    if MODE.lower() == "gui":
+        try:
+            app = _create_gui()
+            app.run()
+        except KeyboardInterrupt:
+            print("🛑 Application interrupted by the user")
+        except Exception as e:
+            print(f"❌ Fatal error in GUI: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            print("👋 KubeWire finished")
+    else:
+        asyncio.run(_create_tui())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
