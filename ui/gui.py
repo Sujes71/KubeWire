@@ -43,7 +43,12 @@ class KubeWireGUI:
         self.services_tree = None
         self.root = tk.Tk()
         self.root.title("🚀 KubeWire - Kubernetes Port Forward Manager")
-        self.root.attributes('-fullscreen', True)
+        self.root.state('zoomed')  # O usa geometry() si no es Windows
+        self.root.lift()
+        self.root.focus_force()
+        self.root.attributes('-topmost', True)
+        self.root.after(10, lambda: self.root.attributes('-topmost', False))
+
 
         try:
             root_dir = os.path.dirname(os.path.dirname(__file__))
@@ -80,6 +85,7 @@ class KubeWireGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         self.initialize_app()
+
 
     def setup_styles(self):
         style = ttk.Style()
@@ -782,9 +788,6 @@ class KubeWireGUI:
         if pod:
             self.start_service_async(pod)
         self.services_tree.focus_set()
-        self.root.after_idle(self.services_tree.focus_set)
-        self.root.after(50, self._ensure_focus_and_selection)
-        self.root.after(200, self._ensure_focus_and_selection)
 
     def stop_selected_service(self):
         selection = self.services_tree.selection()
@@ -800,9 +803,6 @@ class KubeWireGUI:
         if pod:
             self.stop_service_async(pod)
         self.services_tree.focus_set()
-        self.root.after_idle(self.services_tree.focus_set)
-        self.root.after(50, self._ensure_focus_and_selection)
-        self.root.after(200, self._ensure_focus_and_selection)
 
     def start_service_async(self, pod):
         threading.Thread(target=self._start_service, args=(pod,), daemon=True).start()
@@ -893,9 +893,6 @@ class KubeWireGUI:
         for pod in stopped_pods:
             self.start_service_async(pod)
         self.services_tree.focus_set()
-        self.root.after_idle(self.services_tree.focus_set)
-        self.root.after(50, self._ensure_focus_and_selection)
-        self.root.after(200, self._ensure_focus_and_selection)
 
     def stop_all_services(self):
         if not self.current_pods:
@@ -913,9 +910,6 @@ class KubeWireGUI:
             self.stop_service_async(pod)
 
         self.services_tree.focus_set()
-        self.root.after_idle(self.services_tree.focus_set)
-        self.root.after(50, self._ensure_focus_and_selection)
-        self.root.after(200, self._ensure_focus_and_selection)
 
 
     def show_logs(self):
@@ -932,9 +926,6 @@ class KubeWireGUI:
         if pod:
             self.show_pod_logs_async(pod)
         self.services_tree.focus_set()
-        self.root.after_idle(self.services_tree.focus_set)
-        self.root.after(50, self._ensure_focus_and_selection)
-        self.root.after(200, self._ensure_focus_and_selection)
 
     def show_pod_logs_async(self, pod):
         threading.Thread(target=self._show_pod_logs, args=(pod,), daemon=True).start()
