@@ -421,7 +421,7 @@ class KubeWireGUI:
 
     def _start_service_with_focus(self, pod, callback):
         service_name = pod.get_service()
-        self.root.after(0, self.log_message, f"🚀 Starting {service_name}.")
+        self.root.after(0, self.log_message, f"🚀 Starting {service_name}")
         was_running_before = getattr(pod, "_was_running", False)
         try:
             if hasattr(pod, '_start_port_forward') and callable(getattr(pod, '_start_port_forward')):
@@ -516,7 +516,7 @@ class KubeWireGUI:
 
     def _start_service_with_callback(self, pod, callback):
         service_name = pod.get_service()
-        self.root.after(0, self.log_message, f"🚀 Starting {service_name}.")
+        self.root.after(0, self.log_message, f"🚀 Starting {service_name}")
         was_running_before = getattr(pod, "_was_running", False)
         try:
             if hasattr(pod, 'start') and callable(getattr(pod, 'start')):
@@ -653,7 +653,7 @@ class KubeWireGUI:
         else:
             messagebox.showwarning("Inaccessible Context",
                                    f"Context cannot be accessed '{context_name}'.\n"
-                                   f"Check your kubectl.")
+                                   f"Check your kubectl")
             if self.current_context:
                 for i, context_display in enumerate(self.context_combobox['values']):
                     if context_display.startswith(self.current_context):
@@ -831,7 +831,7 @@ class KubeWireGUI:
 
     def _start_service(self, pod):
         service_name = pod.get_service()
-        self.root.after(0, self.log_message, f"🚀 Starting {service_name}.")
+        self.root.after(0, self.log_message, f"🚀 Starting {service_name}")
         was_running_before = getattr(pod, "_was_running", False)
         try:
             success = False
@@ -890,15 +890,19 @@ class KubeWireGUI:
 
     def _stop_service(self, pod):
         service_name = pod.get_service()
+        if not pod._was_running:
+            self.log_message(f"ℹ️ {service_name} already stopped")
+            self.root.after(50, self._ensure_focus_and_selection)
+            return
         self.root.after(0, self.log_message, f"🛑 Stopping {service_name}...")
         success = pod.stop()
-        pod._was_running = False
         if self.pod_monitor:
             pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
             self.pod_monitor.mark_user_stopped(pod_id)
             self.notified_disconnected_pods.discard(pod_id)
         if success:
             self.root.after(0, self.log_message, f"✅ {service_name} stopped correctly")
+            pod._was_running = False
         else:
             self.root.after(0, self.log_message, f"❌ Error at stopping {service_name}")
         self.root.after(100, self._ensure_focus_and_selection)
@@ -918,12 +922,12 @@ class KubeWireGUI:
 
     def stop_all_services(self):
         if not self.current_pods:
-            self.log_message("ℹ️  No services found.")
+            self.log_message("ℹ️  No services found")
             return
 
         running_pods = [pod for pod in self.current_pods if pod.is_running()]
         if not running_pods:
-            self.log_message("ℹ️  All services are already stopped.")
+            self.log_message("ℹ️ All services are already stopped")
             self.root.after(50, self._ensure_focus_and_selection)
             return
 
@@ -1213,7 +1217,7 @@ class KubeWireGUI:
                 if hasattr(self.pod_monitor, "stop"):
                     self.pod_monitor.stop()
                 else:
-                    self.log_message("ℹ️ Pod monitor has no stop method.")
+                    self.log_message("ℹ️ Pod monitor has no stop method")
             except Exception as e:
                 self.log_message(f"⚠️ Error stopping pod monitor: {e}")
 
