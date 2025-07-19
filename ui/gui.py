@@ -32,6 +32,10 @@ SOLARIZED = {
 
 class KubeWireGUI:
     def __init__(self):
+        self.status_label = None
+        self.logs_frame = None
+        self.toggle_logs_button = None
+        self._stream_pod_logs_to_gui = None
         self._spinner_running = None
         self._spinner_label = None
         self.context_combobox = None
@@ -43,7 +47,7 @@ class KubeWireGUI:
         self.services_tree = None
         self.root = tk.Tk()
         self.root.title("🚀 KubeWire - Kubernetes Port Forward Manager")
-        self.root.state('zoomed')  # O usa geometry() si no es Windows
+        self.root.state('zoomed')
         self.root.lift()
         self.root.focus_force()
         self.root.attributes('-topmost', True)
@@ -82,10 +86,32 @@ class KubeWireGUI:
 
         self.create_widgets()
 
+        self.create_logs_frame()
+
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         self.initialize_app()
 
+    def create_logs_frame(self):
+        self.logs_frame = ttk.LabelFrame(self.main_frame, text="📜 Logs", padding="5")
+
+        self.logs_text = tk.Text(self.logs_frame, height=15, wrap=tk.WORD,
+                                 bg=SOLARIZED['base02'], fg=SOLARIZED['base0'], insertbackground=SOLARIZED['base0'])
+        self.logs_text.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(self.logs_frame, command=self.logs_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.logs_text.configure(yscrollcommand=scrollbar.set)
+
+    def toggle_logs_panel(self):
+        if self.logs_frame.winfo_ismapped():
+            self.logs_frame.grid_remove()
+            self.main_frame.rowconfigure(3, weight=0)
+            self.toggle_logs_button.config(text="🔽 Show logs")
+        else:
+            self.logs_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(5, 0))
+            self.main_frame.rowconfigure(3, weight=1)
+            self.toggle_logs_button.config(text="🔼 Hide logs")
 
     def setup_styles(self):
         style = ttk.Style()
@@ -198,7 +224,7 @@ class KubeWireGUI:
         context_control_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         context_control_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(context_control_frame, text="🌍 Context:", style='Subtitle.TLabel').grid(row=0, column=0, padx=(0, 10))
+        ttk.Label(context_control_frame, text="🌍 Context", style='Subtitle.TLabel').grid(row=0, column=0, padx=(0, 10))
 
         self.context_var = tk.StringVar()
         self.context_combobox = ttk.Combobox(context_control_frame, textvariable=self.context_var,
@@ -208,7 +234,11 @@ class KubeWireGUI:
 
         controls_frame = ttk.Frame(context_control_frame)
         controls_frame.grid(row=0, column=2)
+
         ttk.Button(controls_frame, text="🔄", command=self.refresh_contexts, width=3).pack(side=tk.LEFT, padx=(0, 5))
+
+        self.toggle_logs_button = ttk.Button(controls_frame, text="🔽 Show logs", command=self.toggle_logs_panel)
+        self.toggle_logs_button.pack(side=tk.LEFT)
 
         columns = ('Service', 'Port', 'Namespace', 'Status')
         self.services_tree = ttk.Treeview(services_frame, columns=columns, show='headings', height=15)
@@ -551,16 +581,9 @@ class KubeWireGUI:
     def on_key_press(self, event):
         pass
 
-    def create_logs_frame(self):
-        self.logs_text = tk.Text(self.root, height=1, width=1)
-        self.logs_text.insert('1.0', '')
-        self.logs_text.configure(state='disabled')
-
     def create_status_bar(self):
         status_frame = ttk.Frame(self.main_frame)
         status_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
-        self.status_label = ttk.Label(status_frame, text="Starting...", style='Status.TLabel')
-        self.status_label.pack(side=tk.LEFT)
 
     def initialize_app(self):
         self.log_message("🚀 Starting KubeWire...")
@@ -600,7 +623,6 @@ class KubeWireGUI:
             self.log_message(f"✅ Found {accessible_count} accessible context(s)")
         if inaccessible_count > 0:
             self.log_message(f"⚠️ Found {inaccessible_count} inaccessible context(s)")
-        self.update_status("Listo")
 
     def update_context_combobox(self):
         self.context_combobox['values'] = []
@@ -928,27 +950,50 @@ class KubeWireGUI:
         self.services_tree.focus_set()
 
     def show_pod_logs_async(self, pod):
-        threading.Thread(target=self._show_pod_logs, args=(pod,), daemon=True).start()
+        self.clear_logs()
 
-    def _show_pod_logs(self, pod):
+        if not self.logs_frame.winfo_ismapped():
+            self.logs_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(5, 0))
+            self.main_frame.rowconfigure(3, weight=1)
+            self.toggle_logs_button.config(text="🔼 Hide logs")
+
+        threading.Thread(target=self._stream_pod_logs_to_gui, args=(pod,), daemon=True).start()
+
+
+    def _stream_pod_logs_to_gui(self, pod):
         context = pod.get_context()
         namespace = pod.get_namespace()
         service = pod.get_service()
+
         if self._is_stern_available():
-            cmd = f"stern -n {namespace} -l app={service} --since 1h --color always"
-            title = f"Logs: {service} (stern)"
+            cmd = ["stern", "-n", namespace, "-l", f"app={service}", "--since", "1h"]
         else:
-            cmd = f"kubectl logs -n {namespace} -l app={service} --since=1h --tail=100 --follow"
-            title = f"Logs: {service} (kubectl)"
-        terminal_cmd = self._get_terminal_command(service, cmd, title)
-        if terminal_cmd:
-            try:
-                subprocess.Popen(terminal_cmd, shell=True)
-                self.root.after(0, self.log_message, f"📜 Opening logs for {service} in new window...")
-            except Exception as e:
-                self.root.after(0, self.log_message, f"❌ Error opening logs: {e}")
-        else:
-            self.root.after(0, self.log_message, "⚠️ Unable to determine how to open new terminal window")
+            cmd = ["kubectl", "logs", "-n", namespace, "-l", f"app={service}", "--since=1h", "--tail=100", "--follow"]
+
+        try:
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+            def update_logs():
+                for line in process.stdout:
+                    self.root.after(0, self._append_log_line, line)
+
+            threading.Thread(target=update_logs, daemon=True).start()
+            self.root.after(0, self.log_message, f"📜 Showing logs for {service} in the GUI...")
+        except Exception as e:
+            self.root.after(0, self.log_message, f"❌ Error retrieving logs: {e}")
+
+    def _append_log_line(self, line):
+        if self.logs_text:
+            self.logs_text.configure(state='normal')
+            self.logs_text.insert(tk.END, line)
+            self.logs_text.see(tk.END)
+            self.logs_text.configure(state='disabled')
+
+    def clear_logs(self):
+        self.logs_text.configure(state='normal')
+        self.logs_text.delete('1.0', tk.END)
+        self.logs_text.configure(state='disabled')
+
 
     def _is_stern_available(self) -> bool:
         try:
@@ -1139,12 +1184,6 @@ class KubeWireGUI:
                 self.logs_text.configure(state='disabled')
             except Exception:
                 pass
-
-    def clear_logs(self):
-        if self.logs_text is not None:
-            self.logs_text.configure(state='normal')
-            self.logs_text.delete('1.0', tk.END)
-            self.logs_text.configure(state='disabled')
 
     def update_status(self, status):
         self.status_label.config(text=status)
