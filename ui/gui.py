@@ -107,11 +107,11 @@ class KubeWireGUI:
         if self.logs_frame.winfo_ismapped():
             self.logs_frame.grid_remove()
             self.main_frame.rowconfigure(3, weight=0)
-            self.toggle_logs_button.config(text="🔽 Show logs")
+            self.toggle_logs_button.config(text="🔼 Show logs")
         else:
             self.logs_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(5, 0))
             self.main_frame.rowconfigure(3, weight=1)
-            self.toggle_logs_button.config(text="🔼 Hide logs")
+            self.toggle_logs_button.config(text="🔽 Hide logs")
 
     def setup_styles(self):
         style = ttk.Style()
@@ -237,7 +237,7 @@ class KubeWireGUI:
 
         ttk.Button(controls_frame, text="🔄", command=self.refresh_contexts, width=3).pack(side=tk.LEFT, padx=(0, 5))
 
-        self.toggle_logs_button = ttk.Button(controls_frame, text="🔽 Show logs", command=self.toggle_logs_panel)
+        self.toggle_logs_button = ttk.Button(controls_frame, text="🔼 Show logs", command=self.toggle_logs_panel)
         self.toggle_logs_button.pack(side=tk.LEFT)
 
         columns = ('Service', 'Port', 'Namespace', 'Status')
@@ -959,7 +959,7 @@ class KubeWireGUI:
         if not self.logs_frame.winfo_ismapped():
             self.logs_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(5, 0))
             self.main_frame.rowconfigure(3, weight=1)
-            self.toggle_logs_button.config(text="🔼 Hide logs")
+            self.toggle_logs_button.config(text="🔽 Hide logs")
 
         threading.Thread(target=self._stream_pod_logs_to_gui, args=(pod,), daemon=True).start()
 
