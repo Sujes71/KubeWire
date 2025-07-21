@@ -1,12 +1,12 @@
 import os
 import subprocess
-import sys
 import threading
 import tkinter as tk
 from datetime import datetime
 from tkinter import ttk, messagebox
 
 from config.config_manager import ConfigManager
+from logs.log_manager import LogsManager
 from pods.pod_monitor import PodMonitor
 from pods.sound_notifier import SoundNotifier
 
@@ -28,7 +28,6 @@ SOLARIZED = {
     'cyan':   '#2aa198',
     'green':  '#859900',
 }
-
 
 class KubeWireGUI:
     def __init__(self):
@@ -84,6 +83,8 @@ class KubeWireGUI:
 
         self.setup_styles()
 
+        self.init_logs_manager()
+
         self.create_widgets()
 
         self.create_logs_frame()
@@ -91,6 +92,11 @@ class KubeWireGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         self.initialize_app()
+        
+
+    def init_logs_manager(self):
+        """Agregar esto al __init__ de KubeWireGUI"""
+        self.logs_manager = LogsManager(self)
 
     def create_logs_frame(self):
         self.logs_frame = ttk.LabelFrame(self.main_frame, text="📜 Logs", padding="5")
@@ -112,6 +118,7 @@ class KubeWireGUI:
             self.logs_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(5, 0))
             self.main_frame.rowconfigure(3, weight=1)
             self.toggle_logs_button.config(text="🔽 Hide logs")
+        self.services_tree.focus_set()
 
     def setup_styles(self):
         style = ttk.Style()
@@ -945,13 +952,19 @@ class KubeWireGUI:
         if not running_pods:
             self.log_message("ℹ️ All services are already stopped")
             self.root.after(50, self._ensure_focus_and_selection)
+            self.services_tree.focus_set()
             return
 
         self.log_message(f"🛑 Stopping {len(running_pods)} service(s)...")
+        self._pending_stops = len(running_pods)
+        def stop_callback():
+            self._pending_stops -= 1
+            if self._pending_stops == 0:
+                self.update_services_list()
+                self.root.after(100, self._ensure_focus_and_selection)
+                self.services_tree.focus_set()
         for pod in running_pods:
-            self.stop_service_async(pod)
-
-        self.services_tree.focus_set()
+            self.stop_service_async_with_callback(pod, stop_callback)
 
 
     def show_logs(self):
@@ -970,14 +983,25 @@ class KubeWireGUI:
         self.services_tree.focus_set()
 
     def show_pod_logs_async(self, pod):
-        self.clear_logs()
-
-        if not self.logs_frame.winfo_ismapped():
-            self.logs_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(5, 0))
-            self.main_frame.rowconfigure(3, weight=1)
-            self.toggle_logs_button.config(text="🔽 Hide logs")
-
-        threading.Thread(target=self._stream_pod_logs_to_gui, args=(pod,), daemon=True).start()
+        """Reemplazar el método show_pod_logs_async existente"""
+        selection = self.services_tree.selection()
+        if not selection:
+            messagebox.showwarning("No selection", "Select a service first")
+            self.root.after(50, self._ensure_focus_and_selection)
+            return
+            
+        item = selection[0]
+        values = self.services_tree.item(item, 'values')
+        service_name = values[0]
+        self.current_selection = service_name
+        
+        pod = next((p for p in self.current_pods if p.get_service() == service_name), None)
+        if pod:
+            self.logs_manager.show_pod_logs_async(pod)
+        else:
+            self.log_message(f"❌ No se encontró el pod para el servicio: {service_name}")
+        
+        self.services_tree.focus_set()
 
 
     def _stream_pod_logs_to_gui(self, pod):
@@ -1128,10 +1152,14 @@ class KubeWireGUI:
             print(full_message, end='')
         except Exception:
             pass
+        # Ya no se imprime en self.logs_text aquí, solo en terminal
+
+    def append_service_log(self, line):
+        """Agrega una línea de log de servicio al widget de logs"""
         if self.logs_text is not None:
             try:
                 self.logs_text.configure(state='normal')
-                self.logs_text.insert(tk.END, full_message)
+                self.logs_text.insert(tk.END, line)
                 self.logs_text.see(tk.END)
                 self.logs_text.configure(state='disabled')
             except Exception:
@@ -1165,32 +1193,23 @@ class KubeWireGUI:
                 self.log_message(f"❌ Error stopping {pod.get_service()}: {e}")
 
     def on_closing(self):
+        """Cierre seguro: solo ejecuta una vez y destruye la ventana."""
+        if hasattr(self, '_closed') and self._closed:
+            return
+        self._closed = True
         self.log_message("👋 Closing application...")
         self.running = False
+        
+        # Detener streaming de logs
+        if hasattr(self, 'logs_manager'):
+            self.logs_manager.stop_current_streaming()
+        
         try:
-            # Deshabilita la ventana para evitar interacción
             self.root.withdraw()
             self.root.update()
         except Exception:
             pass
         try:
-            self.stop_all_services_blocking()
-        except Exception as e:
-            self.log_message(f"⚠️ Error stopping services: {e}")
-        if self.pod_monitor:
-            try:
-                if hasattr(self.pod_monitor, "stop"):
-                    self.pod_monitor.stop()
-                else:
-                    self.log_message("ℹ️ Pod monitor has no stop method")
-            except Exception as e:
-                self.log_message(f"⚠️ Error stopping pod monitor: {e}")
-        try:
-            self.stop_auto_refresh()  # <--- CANCELA EL AUTO REFRESH ANTES DE DESTRUIR LA VENTANA
-        except Exception:
-            pass
-        try:
-            self.root.quit()
             self.root.destroy()
         except Exception:
             pass
