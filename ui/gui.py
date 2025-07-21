@@ -789,7 +789,10 @@ class KubeWireGUI:
     def _auto_refresh(self):
         if not (self.running and self.current_context):
             return
-        focused = self.root.focus_get()
+        try:
+            focused = self.root.focus_get()
+        except KeyError:
+            focused = None
         if focused == self.services_tree:
             current = {p.get_service(): (p.is_running(), self._is_pod_failed(p)) for p in self.current_pods}
             if not hasattr(self, '_last_states') or self._last_states != current:
