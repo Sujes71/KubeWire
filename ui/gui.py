@@ -931,7 +931,7 @@ class KubeWireGUI:
     def _stop_service(self, pod):
         service_name = pod.get_service()
         if not pod._was_running:
-            self.log_message(f"ℹ️ {service_name} already stopped")
+            self.log_message(f"ℹ️  {service_name} already stopped")
             self.root.after(50, self._ensure_focus_and_selection)
             return
         self.root.after(0, self.log_message, f"🛑 Stopping {service_name}...")
@@ -963,12 +963,12 @@ class KubeWireGUI:
 
     def stop_all_services(self):
         if not self.current_pods:
-            self.log_message("ℹ️  No services found")
+            self.log_message("ℹ️   No services found")
             return
 
         running_pods = [pod for pod in self.current_pods if pod.is_running()]
         if not running_pods:
-            self.log_message("ℹ️ All services are already stopped")
+            self.log_message("ℹ️  All services are already stopped")
             self.root.after(50, self._ensure_focus_and_selection)
             self.services_tree.focus_set()
             return
@@ -1218,7 +1218,7 @@ class KubeWireGUI:
         if hasattr(self, '_closed') and self._closed:
             return
         self._closed = True
-        self.log_message("👋 Closing application...")
+        # Elimina el log aquí, lo hará el main si corresponde
         self.running = False
         
         # Detener streaming de logs

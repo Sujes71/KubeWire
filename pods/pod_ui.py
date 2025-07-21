@@ -44,6 +44,12 @@ class PodUI:
             except OSError:
                 return False
 
+    @staticmethod
+    def _log_console(message):
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        print(f"[{timestamp}] {message}")
+
     async def start(self) -> bool:
         if self.is_running():
             return True
@@ -58,7 +64,7 @@ class PodUI:
         ]
 
         if not self._is_port_available(self.get_port()):
-            print(f"❌ Port {self.get_port()} is already in use for {self.get_service()}")
+            PodUI._log_console(f"❌ Port {self.get_port()} is already in use for {self.get_service()}")
             return False
 
         if self.process and not self.is_running():
@@ -89,22 +95,22 @@ class PodUI:
                     if stderr_data:
                         stderr_lower = stderr_data.lower()
                         if "unable to listen on port" in stderr_lower:
-                            print(f"❌ Port {self.get_port()} is already in use for {self.get_service()}")
+                            PodUI._log_console(f"❌ Port {self.get_port()} is already in use for {self.get_service()}")
                         elif "service" in stderr_lower and "not found" in stderr_lower:
-                            print(f"❌ Service '{self.get_service()}' not found in namespace '{self.get_namespace()}'")
+                            PodUI._log_console(f"❌ Service '{self.get_service()}' not found in namespace '{self.get_namespace()}'")
                         elif "context" in stderr_lower and "not found" in stderr_lower:
-                            print(f"❌ Kubernetes context not found. Check kubectl configuration.")
+                            PodUI._log_console(f"❌ Kubernetes context not found. Check kubectl configuration.")
                         elif "kubectl" in stderr_lower and "not found" in stderr_lower:
-                            print(f"❌ kubectl command not found. Please install kubectl.")
+                            PodUI._log_console(f"❌ kubectl command not found. Please install kubectl.")
 
                 self.process = None
                 return False
 
         except FileNotFoundError:
-            print(f"❌ kubectl command not found. Please install kubectl.")
+            PodUI._log_console(f"❌ kubectl command not found. Please install kubectl.")
             return False
         except Exception as e:
-            print(f"❌ Unexpected error for {self.get_service()}: {e}")
+            PodUI._log_console(f"❌ Unexpected error for {self.get_service()}: {e}")
             return False
 
     def stop(self) -> bool:

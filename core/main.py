@@ -1,6 +1,6 @@
 import asyncio
-import sys
 import os
+import sys
 
 from config.config_manager import ConfigManager
 from ui.tui import KubeWireTUI
@@ -66,18 +66,14 @@ async def _create_tui():
 
 
 def main():
-    if MODE.lower() == "gui":
+    if MODE == "gui":
+        gui = _create_gui()
         try:
-            app = _create_gui()
-            app.run()
-        except KeyboardInterrupt:
-            print("🛑 Application interrupted by the user")
-        except Exception as e:
-            print(f"❌ Fatal error in GUI: {e}")
-            import traceback
-            traceback.print_exc()
+            gui.run()
         finally:
-            print("👋 KubeWire finished")
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] 👋 KubeWire finished")
     else:
         asyncio.run(_create_tui())
 

@@ -49,8 +49,13 @@ class LogsManager:
                    "--since=1h", "--tail=100", "--follow", "--timestamps"]
         
         try:
-            # Mensaje inicial SOLO en terminal
-            print(f"📜 Iniciando logs para {service} en namespace {namespace}...\n" + "-" * 80)
+            # Mensaje inicial SOLO en terminal, con formato consistente
+            if hasattr(self.gui, 'log_message'):
+                self.gui.log_message(f"📜 Showing logs for {service} in namespace {namespace}...")
+            else:
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                print(f"[{timestamp}] 📜 Showing logs for {service} in namespace {namespace}...")
             
             # Ejecutar comando
             with self._lock:
@@ -71,11 +76,11 @@ class LogsManager:
                     self.log_queue.put(line)
             
         except subprocess.CalledProcessError as e:
-            print(f"❌ Error ejecutando comando de logs: {e}")
+            self._log_console(f"❌ Error ejecutando comando de logs: {e}")
         except FileNotFoundError as e:
-            print(f"❌ Comando no encontrado: {e}\n💡 Asegúrate de tener kubectl instalado y configurado")
+            self._log_console(f"❌ Comando no encontrado: {e}\n💡 Asegúrate de tener kubectl instalado y configurado")
         except Exception as e:
-            print(f"❌ Error inesperado: {e}")
+            self._log_console(f"❌ Error inesperado: {e}")
         finally:
             with self._lock:
                 if self.current_process:
@@ -150,3 +155,11 @@ class LogsManager:
             return True
         except:
             return False
+
+    def _log_console(self, message):
+        if hasattr(self.gui, 'log_message'):
+            self.gui.log_message(message)
+        else:
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] {message}")
