@@ -349,6 +349,7 @@ class KubeWireGUI:
         return 'break'
 
     def start_service_async_with_enter(self, pod):
+        pod._is_starting = True
         def restore_focus_callback():
             self.root.after(10, self._force_focus_restoration)
             self.root.after(100, self._force_focus_restoration)
@@ -434,6 +435,8 @@ class KubeWireGUI:
         service_name = pod.get_service()
         self.root.after(0, self.log_message, f"🚀 Starting {service_name}")
         was_running_before = getattr(pod, "_was_running", False)
+        pod._is_starting = True
+        self.root.after(0, self.update_services_list)
         try:
             if hasattr(pod, '_start_port_forward') and callable(getattr(pod, '_start_port_forward')):
                 success = pod._start_port_forward()
@@ -463,6 +466,7 @@ class KubeWireGUI:
 
             pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
 
+            pod._is_starting = False
             if success:
                 pod._was_running = True
                 if self.pod_monitor:
@@ -484,6 +488,7 @@ class KubeWireGUI:
             self.root.after(100, self.update_services_list)
 
         except Exception as e:
+            pod._is_starting = False
             if not was_running_before:
                 pod._was_running = False
                 pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
@@ -720,10 +725,13 @@ class KubeWireGUI:
         for pod in self.current_pods:
             pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
             running = pod.is_running()
+            starting = getattr(pod, "_is_starting", False)
             failed = self._is_pod_failed(pod)
-            if failed:
+            if starting:
+                status, tags = "🟡 STARTING", ('starting',)
+            elif failed:
                 status, tags = "💥 FAILED", ('failed',)
-                if pod_id not in self.notified_disconnected_pods:
+                if pod_id not in self.notified_disconnected_pods and getattr(pod, "_was_running", False):
                     new_failed_pods.append(pod_id)
             elif running:
                 status, tags = "🟢 RUNNING", ('running',)
@@ -752,6 +760,7 @@ class KubeWireGUI:
         self.services_tree.tag_configure('running', foreground=SOLARIZED['green'], font=('Arial', 13, 'bold'))
         self.services_tree.tag_configure('stopped', foreground=SOLARIZED['red'], font=('Arial', 13, 'bold'))
         self.services_tree.tag_configure('failed', foreground=SOLARIZED['orange'], font=('Arial', 13, 'bold'))
+        self.services_tree.tag_configure('starting', foreground=SOLARIZED['yellow'], font=('Arial', 13, 'bold'))
 
         if prev_sel and prev_sel in self._service_to_item:
             iid = self._service_to_item[prev_sel]
@@ -847,12 +856,15 @@ class KubeWireGUI:
         self.services_tree.focus_set()
 
     def start_service_async(self, pod):
+        pod._is_starting = True
         threading.Thread(target=self._start_service, args=(pod,), daemon=True).start()
 
     def _start_service(self, pod):
         service_name = pod.get_service()
         self.root.after(0, self.log_message, f"🚀 Starting {service_name}")
         was_running_before = getattr(pod, "_was_running", False)
+        pod._is_starting = True
+        self.root.after(0, self.update_services_list)
         try:
             success = False
             if hasattr(pod, '_start_port_forward') and callable(getattr(pod, '_start_port_forward')):
@@ -881,6 +893,7 @@ class KubeWireGUI:
 
             pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
 
+            pod._is_starting = False
             if success:
                 pod._was_running = True
                 if self.pod_monitor:
@@ -902,6 +915,7 @@ class KubeWireGUI:
             self.root.after(100, self.update_services_list)
             self.root.after(200, self._ensure_focus_and_selection)
         except Exception as e:
+            pod._is_starting = False
             if not was_running_before:
                 pod._was_running = False
                 pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
@@ -943,6 +957,7 @@ class KubeWireGUI:
             return
         self.log_message(f"🚀 Starting {len(stopped_pods)} service(s)...")
         for pod in stopped_pods:
+            pod._is_starting = True
             self.start_service_async(pod)
         self.services_tree.focus_set()
 
@@ -1052,15 +1067,14 @@ class KubeWireGUI:
     def _is_pod_failed(self, pod):
         pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
         previously_running = getattr(pod, "_was_running", False)
-
-        if not previously_running:
+        currently_running = pod.is_running()
+        starting = getattr(pod, "_is_starting", False)
+        if starting:
             return False
-
         recently_failed = False
         if self.pod_monitor and hasattr(self.pod_monitor, "recently_failed_pods"):
             recently_failed = pod_id in self.pod_monitor.recently_failed_pods
-
-        return recently_failed or (not pod.is_running())
+        return (previously_running and (recently_failed or not currently_running))
 
     def _update_contexts_and_restore(self, contexts, context_statuses, restore_context):
         self.contexts = contexts

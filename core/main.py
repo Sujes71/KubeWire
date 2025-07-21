@@ -1,8 +1,25 @@
 import asyncio
 import sys
+import os
 
 from config.config_manager import ConfigManager
 from ui.tui import KubeWireTUI
+
+# --- Fix PATH for bundled app (py2app/PyInstaller) ---
+extra_paths = [
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin"
+]
+current_path = os.environ.get("PATH", "")
+for p in extra_paths:
+    if p not in current_path:
+        current_path += os.pathsep + p
+os.environ["PATH"] = current_path
+# -----------------------------------------------------
 
 MODE = "gui"
 
