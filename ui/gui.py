@@ -665,6 +665,7 @@ class KubeWireGUI:
                 self.show_loading_overlay("Updating contexts...")
                 self.log_message("🔄 Updating configuration...")
                 contexts, context_statuses = ConfigManager.discover_config()
+                self.set_ui_enabled(True)
                 self.hide_loading_overlay()
                 if contexts:
                     ConfigManager.save_discovered_config(contexts)
