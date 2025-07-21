@@ -65,7 +65,7 @@ async def _create_tui():
 
 
 def main():
-    if MODE == "tui":
+    if MODE == "gui":
         gui = _create_gui()
         try:
             gui.run()
