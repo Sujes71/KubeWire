@@ -337,7 +337,8 @@ class KubeWireTUI:
             print(f"🚀 Starting {len(stopped_pods)} service(s)...", end="", flush=True)
 
             for i, pod in enumerate(stopped_pods, 1):
-                print(f"\r🚀 Starting {i}/{len(stopped_pods)}: {pod.get_service()}...", end="", flush=True)
+                self.clear_line()
+                print(f"🚀 Starting {i}/{len(stopped_pods)}: {pod.get_service()}...", end="", flush=True)
                 await pod.start()
                 pod._was_running = True
                 pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
@@ -345,7 +346,8 @@ class KubeWireTUI:
                 self.notified_disconnected_pods.discard(pod_id)
                 await asyncio.sleep(0.1)
 
-            print(f"\r✅ Started {len(stopped_pods)} service(s) successfully!{' '*20}")
+            self.clear_line()
+            print(f"✅ Started {len(stopped_pods)} service(s) successfully!{' '*20}")
             await asyncio.sleep(1)
         elif choice == 'stop':
             running_pods = [pod for pod in self.current_pods if pod.is_running()]
@@ -357,14 +359,16 @@ class KubeWireTUI:
             print(f"🛑 Stopping {len(running_pods)} service(s)...", end="", flush=True)
 
             for i, pod in enumerate(running_pods, 1):
-                print(f"\r🛑 Stopping {i}/{len(running_pods)}: {pod.get_service()}...", end="", flush=True)
+                self.clear_line()
+                print(f"🛑 Stopping {i}/{len(running_pods)}: {pod.get_service()}...", end="", flush=True)
                 pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
                 self.pod_monitor.mark_user_stopped(pod_id)
                 self.notified_disconnected_pods.discard(pod_id)
                 await asyncio.sleep(0.1)
 
             self.stop_current_context()
-            print(f"\r✅ Stopped {len(running_pods)} service(s) successfully!{' '*20}")
+            self.clear_line()
+            print(f"✅ Stopped {len(running_pods)} service(s) successfully!{' '*20}")
             await asyncio.sleep(1)
         elif choice.isdigit():
             index = int(choice) - 1
@@ -505,6 +509,9 @@ class KubeWireTUI:
     fi
     '
     """
+
+    def clear_line(self):
+        print("\r" + " " * 100 + "\r", end="")
 
     def stop_current_context(self):
         if not self.current_pods:

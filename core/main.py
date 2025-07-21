@@ -49,7 +49,7 @@ async def _create_tui():
 
 
 def main():
-    if MODE.lower() == "gui":
+    if MODE.lower() == "tui":
         try:
             app = _create_gui()
             app.run()
