@@ -123,7 +123,8 @@ class KubeWireGUI:
                         background=SOLARIZED['base03'],
                         foreground=SOLARIZED['base0'],
                         fieldbackground=SOLARIZED['base02'],
-                        relief='flat')
+                        relief='flat',
+                        font=('Arial', 12))
 
         style.configure('Title.TLabel', font=('Arial', 16, 'bold'),
                         background=SOLARIZED['base03'], foreground=SOLARIZED['blue'])
@@ -136,21 +137,25 @@ class KubeWireGUI:
         style.configure('Stopped.TLabel', foreground=SOLARIZED['red'])
         style.configure('Failed.TLabel', foreground=SOLARIZED['orange'])
 
+        # Mejorar Treeview: fuente más grande, centrado, colores y selección
         style.configure('Treeview',
                         background=SOLARIZED['base02'],
                         foreground=SOLARIZED['base0'],
                         fieldbackground=SOLARIZED['base02'],
-                        rowheight=22,
+                        rowheight=28,
                         bordercolor=SOLARIZED['base01'],
-                        borderwidth=0)
+                        borderwidth=0,
+                        font=('Arial', 13, 'bold'))
         style.map('Treeview',
-                  background=[('selected', SOLARIZED['base01'])],
+                  background=[('selected', SOLARIZED['blue'])],
                   foreground=[('selected', SOLARIZED['base3'])])
 
         style.configure('Treeview.Heading',
                         background=SOLARIZED['base01'],
-                        foreground=SOLARIZED['base3'],
-                        relief='raised')
+                        foreground=SOLARIZED['yellow'],
+                        relief='raised',
+                        font=('Arial', 14, 'bold'),
+                        anchor='center')
         style.map('Treeview.Heading',
                   background=[('active', SOLARIZED['base00'])])
 
@@ -241,15 +246,14 @@ class KubeWireGUI:
         self.toggle_logs_button.pack(side=tk.LEFT)
 
         columns = ('Service', 'Port', 'Namespace', 'Status')
-        self.services_tree = ttk.Treeview(services_frame, columns=columns, show='headings', height=15)
+        self.services_tree = ttk.Treeview(services_frame, columns=columns, show='headings', height=15, style='Treeview')
 
-        self.services_tree.heading('Service', text='Service', command=lambda: self.sort_treeview('Service'))
-        self.services_tree.heading('Port', text='Port', command=lambda: self.sort_treeview('Port'))
-        self.services_tree.heading('Namespace', text='Namespace', command=lambda: self.sort_treeview('Namespace'))
-        self.services_tree.heading('Status', text='Status', command=lambda: self.sort_treeview('Status'))
-
+        # Centrar todas las columnas y encabezados
+        for col in columns:
+            self.services_tree.heading(col, text=col, anchor='center', command=lambda c=col: self.sort_treeview(c))
+            self.services_tree.column(col, anchor='center')
         self.services_tree.column('Service', width=240)
-        self.services_tree.column('Port', width=100, anchor=tk.CENTER)
+        self.services_tree.column('Port', width=100)
         self.services_tree.column('Namespace', width=180)
         self.services_tree.column('Status', width=160)
 
@@ -738,9 +742,9 @@ class KubeWireGUI:
         for svc, iid in existing.items():
             if svc not in updated_services:
                 self.services_tree.delete(iid)
-        self.services_tree.tag_configure('running', foreground=SOLARIZED['green'])
-        self.services_tree.tag_configure('stopped', foreground=SOLARIZED['red'])
-        self.services_tree.tag_configure('failed', foreground=SOLARIZED['orange'])
+        self.services_tree.tag_configure('running', foreground=SOLARIZED['green'], font=('Arial', 13, 'bold'))
+        self.services_tree.tag_configure('stopped', foreground=SOLARIZED['red'], font=('Arial', 13, 'bold'))
+        self.services_tree.tag_configure('failed', foreground=SOLARIZED['orange'], font=('Arial', 13, 'bold'))
 
         if prev_sel and prev_sel in self._service_to_item:
             iid = self._service_to_item[prev_sel]
@@ -1249,6 +1253,10 @@ class KubeWireGUI:
                     self.log_message("ℹ️ Pod monitor has no stop method")
             except Exception as e:
                 self.log_message(f"⚠️ Error stopping pod monitor: {e}")
+        try:
+            self.stop_auto_refresh()  # <--- CANCELA EL AUTO REFRESH ANTES DE DESTRUIR LA VENTANA
+        except Exception:
+            pass
         try:
             self.root.quit()
             self.root.destroy()
