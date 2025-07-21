@@ -191,6 +191,8 @@ class KubeWireGUI:
         self.root.bind_all('<Command-q>', lambda e: self.on_closing())
         self.root.bind_all('<Command-w>', lambda e: self.on_closing())
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.root.bind('<FocusIn>', self._on_root_focus_in)
+        self.root.bind('<FocusOut>', self._on_root_focus_out)
 
         title_label = ttk.Label(
             self.main_frame,
@@ -1151,6 +1153,10 @@ class KubeWireGUI:
         self._animate_spinner()
 
         self._loading_overlay.transient(self.root)
+        self._loading_overlay.attributes('-topmost', True)
+        self.root.focus_force()
+
+        self._loading_overlay.transient(self.root)
         self._loading_overlay.grab_set()
 
     def hide_loading_overlay(self):
@@ -1258,3 +1264,11 @@ class KubeWireGUI:
                         btn.state(["!disabled"] if enabled else ["disabled"])
         # Combobox
         self.context_combobox.configure(state="readonly" if enabled else "disabled")
+
+    def _on_root_focus_out(self, event):
+        if hasattr(self, '_loading_overlay') and self._loading_overlay:
+            self._loading_overlay.withdraw()
+
+    def _on_root_focus_in(self, event):
+        if hasattr(self, '_loading_overlay') and self._loading_overlay:
+            self._loading_overlay.deiconify()
