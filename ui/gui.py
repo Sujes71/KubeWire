@@ -435,10 +435,16 @@ class KubeWireGUI:
                     if inspect.iscoroutinefunction(start_method):
                         try:
                             loop = asyncio.get_event_loop()
+                            created = False
                         except RuntimeError:
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
-                        success = loop.run_until_complete(start_method())
+                            created = True
+                        try:
+                            success = loop.run_until_complete(start_method())
+                        finally:
+                            if created:
+                                loop.close()
                     else:
                         success = start_method()
                 else:
@@ -846,10 +852,16 @@ class KubeWireGUI:
                     if inspect.iscoroutinefunction(start_method):
                         try:
                             loop = asyncio.get_event_loop()
+                            created = False
                         except RuntimeError:
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
-                        success = loop.run_until_complete(start_method())
+                            created = True
+                        try:
+                            success = loop.run_until_complete(start_method())
+                        finally:
+                            if created:
+                                loop.close()
                     else:
                         success = start_method()
 
@@ -1203,15 +1215,32 @@ class KubeWireGUI:
                 self.notified_disconnected_pods.add(pod_id)
         self.request_refresh()
 
+    def stop_all_services_blocking(self):
+        """Detiene todos los servicios de forma síncrona y segura."""
+        if not self.current_pods:
+            return
+        for pod in self.current_pods:
+            try:
+                if pod.is_running():
+                    self.log_message(f"🛑 Stopping {pod.get_service()} (blocking)...")
+                    pod.stop()
+                    pod._was_running = False
+            except Exception as e:
+                self.log_message(f"❌ Error stopping {pod.get_service()}: {e}")
+
     def on_closing(self):
         self.log_message("👋 Closing application...")
         self.running = False
-
         try:
-            self.stop_all_services()
+            # Deshabilita la ventana para evitar interacción
+            self.root.withdraw()
+            self.root.update()
+        except Exception:
+            pass
+        try:
+            self.stop_all_services_blocking()
         except Exception as e:
             self.log_message(f"⚠️ Error stopping services: {e}")
-
         if self.pod_monitor:
             try:
                 if hasattr(self.pod_monitor, "stop"):
@@ -1220,9 +1249,11 @@ class KubeWireGUI:
                     self.log_message("ℹ️ Pod monitor has no stop method")
             except Exception as e:
                 self.log_message(f"⚠️ Error stopping pod monitor: {e}")
-
-        self.root.quit()
-        self.root.destroy()
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except Exception:
+            pass
 
     def run(self):
         self.root.mainloop()
