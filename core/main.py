@@ -37,11 +37,12 @@ async def _create_tui():
 
         accessible_count = len(contexts)
         inaccessible_count = len([s for s in context_statuses if not s.accessible])
-
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
         if accessible_count > 0:
-            print(f"✅ Found {accessible_count} accessible context(s)")
+            print(f"[{timestamp}] ✅ Found {accessible_count} accessible context(s)")
         if inaccessible_count > 0:
-            print(f"⚠️  Found {inaccessible_count} inaccessible context(s)")
+            print(f"[{timestamp}] ⚠️  Found {inaccessible_count} inaccessible context(s)")
         if accessible_count == 0:
             print("❌ No accessible contexts found.")
             print("💡 Possible solutions:")
@@ -64,7 +65,7 @@ async def _create_tui():
 
 
 def main():
-    if MODE == "gui":
+    if MODE == "tui":
         gui = _create_gui()
         try:
             gui.run()

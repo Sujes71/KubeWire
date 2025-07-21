@@ -109,32 +109,42 @@ class ConfigManager:
             config_file.parent.mkdir(parents=True, exist_ok=True)
             with open(config_file, 'w', encoding='utf-8') as f:
                 yaml.dump(config_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-            print(f"\n💾 Configuration saved to {config_file}")
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] 💾 Configuration saved to {config_file}")
         except Exception as e:
-            print(f"\n❌ Failed to save configuration: {e}")
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] ❌ Failed to save configuration: {e}")
 
     @staticmethod
     def read_config() -> Dict[str, List[PodUI]]:
         config_file = ConfigManager.get_config_path()
 
         # Mostrar información de debug
-        print(f"🔍 Looking for config file at: {config_file}")
-        print(f"🔍 Config file exists: {config_file.exists()}")
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        print(f"[{timestamp}] 🔍 Looking for config file at: {config_file}")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        print(f"[{timestamp}] 🔍 Config file exists: {config_file.exists()}")
 
         if not config_file.exists():
-            print(f"⚠️  Config file not found. Will be created after first discovery.")
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] ⚠️  Config file not found. Will be created after first discovery.")
             return {}
 
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
                 if not content:
-                    print(f"⚠️  Config file is empty.")
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    print(f"[{timestamp}] ⚠️  Config file is empty.")
                     return {}
 
                 config_data = yaml.safe_load(content)
                 if not config_data or 'contexts' not in config_data:
-                    print(f"⚠️  Config file has invalid format.")
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    print(f"[{timestamp}] ⚠️  Config file has invalid format.")
                     return {}
 
                 result = {}
@@ -154,11 +164,13 @@ class ConfigManager:
                             context_pods.append(PodUI(pod))
                     result[context_name] = context_pods
 
-                print(f"✅ Loaded configuration with {len(result)} contexts")
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                print(f"[{timestamp}] ✅ Loaded configuration with {len(result)} contexts")
                 return result
 
         except Exception as e:
-            print(f"❌ Error reading config file: {e}")
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] ❌ Error reading config file: {e}")
             return {}
 
     @staticmethod

@@ -656,11 +656,16 @@ class KubeWireGUI:
 
     def _initialize_async(self):
         try:
+
             contexts = ConfigManager.read_config()
             context_statuses = []
             if not contexts:
                 self.log_message("🔧 Auto-discovering configuration of Kubernetes...")
+                self.set_ui_enabled(False)
+                self.show_loading_overlay("Updating contexts...")
+                self.log_message("🔄 Updating configuration...")
                 contexts, context_statuses = ConfigManager.discover_config()
+                self.hide_loading_overlay()
                 if contexts:
                     ConfigManager.save_discovered_config(contexts)
             self.root.after(0, self._update_contexts, contexts, context_statuses)
