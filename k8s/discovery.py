@@ -21,7 +21,7 @@ class KubernetesDiscovery:
 
     @staticmethod
     def get_contexts() -> List[str]:
-        KubernetesDiscovery._log_console("\ud83d\udd0d Discovering Kubernetes contexts...")
+        KubernetesDiscovery._log_console("🔧 Discovering Kubernetes contexts...")
         success, output = KubernetesDiscovery.run_kubectl_command([
             "kubectl", "config", "get-contexts", "-o", "name"
         ])

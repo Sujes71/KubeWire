@@ -21,7 +21,6 @@ class ConfigManager:
 
     @staticmethod
     def discover_config() -> Tuple[Dict[str, List[PodUI]], List[ContextStatus]]:
-        print("🔧 Auto-discovering Kubernetes configuration...")
         contexts = KubernetesDiscovery.get_contexts()
         if not contexts:
             print("❌ No contexts found")
@@ -55,7 +54,9 @@ class ConfigManager:
 
             if context_pods:
                 result[context] = context_pods
-                print(f"   ✅ Added {len(context_pods)} services from context {context}")
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                print(f"[{timestamp}] ✅ Added {len(context_pods)} services from context {context}")
             else:
                 print(f"   ⚠️  No services found in context {context}")
 
@@ -85,8 +86,8 @@ class ConfigManager:
 
         try:
             config_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(config_file, 'w') as f:
-                yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
+            with open(config_file, 'w', encoding='utf-8') as f:
+                yaml.dump(config_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
             print(f"\n💾 Configuration saved to {config_file}")
         except Exception as e:
             print(f"\n❌ Failed to save configuration: {e}")

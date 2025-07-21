@@ -717,7 +717,10 @@ class KubeWireGUI:
     def update_services_list(self):
         if not self.current_pods:
             return
-        had_focus = self.services_tree == self.root.focus_get()
+        try:
+            had_focus = self.services_tree == self.root.focus_get()
+        except KeyError:
+            had_focus = False
         prev_sel = self.current_selection
         existing = {self.services_tree.item(iid, 'values')[0]: iid for iid in self.services_tree.get_children()}
         new_failed_pods = []
@@ -1187,7 +1190,8 @@ class KubeWireGUI:
                 pass
 
     def update_status(self, status):
-        self.status_label.config(text=status)
+        if self.status_label is not None:
+            self.status_label.config(text=status)
 
     def request_refresh(self):
         if self.running:

@@ -35,6 +35,12 @@ class KubeWireTUI:
         for context_pods in self.contexts.values():
             for pod in context_pods:
                 pod._was_running = False
+                pod._is_starting = False
+
+    @staticmethod
+    def _log_console(message):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        print(f"[{timestamp}] {message}")
 
     def request_refresh(self):
         self.refresh_requested.set()
@@ -225,6 +231,7 @@ class KubeWireTUI:
                     elif "Unknown error" in selected_context['error']:
                         print("   - Unknown")
                     await asyncio.sleep(3)
+                    await self.select_context()
                     return
                 new_context = selected_context['name']
                 if new_context != self.current_context:
@@ -257,16 +264,18 @@ class KubeWireTUI:
         for i, pod in enumerate(self.current_pods, 1):
             pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
             is_running = pod.is_running()
-            is_failed = pod_id in self.pod_monitor.recently_failed_pods
+            is_starting = getattr(pod, "_is_starting", False)
+            is_failed = self._is_pod_failed(pod)
 
-            if is_failed:
+            if is_starting:
+                status_icon = "🟡"
+                status_text = "STARTING"
+            elif is_failed:
                 status_icon = "💥"
-                status_text = "DISCONNECTED"
-
+                status_text = "FAILED"
                 if self.sound_enabled and pod_id not in self.notified_disconnected_pods:
                     self.notified_disconnected_pods.add(pod_id)
                     threading.Thread(target=self.sound_notifier.play_disconnect_sound, daemon=True).start()
-
             elif is_running:
                 status_icon = "🟢"
                 status_text = "RUNNING"
@@ -300,15 +309,15 @@ class KubeWireTUI:
                 return
 
         if choice == 'q' or choice == 'quit':
-            print("👋 Stopping all services and exiting...\n")
+            self._log_console("👋 Stopping all services and exiting...")
             self.stop_all_contexts()
             self.running = False
         elif choice == 'env' or choice == 'e':
-            print("🔄 Switching to environment selection...")
+            self._log_console("🔄 Switching to environment selection...")
             await asyncio.sleep(0.5)
             await self.select_context()
         elif choice == 'refresh' or choice == 'r':
-            print("🔄 Re-discovering services...", end="", flush=True)
+            self._log_console("🔄 Re-discovering services...")
             new_contexts, new_statuses = ConfigManager.discover_config()
             if new_contexts:
                 self.stop_current_context()
@@ -319,56 +328,88 @@ class KubeWireTUI:
                     self.current_pods = new_contexts[self.current_context]
                     for pod in self.current_pods:
                         pod._was_running = pod.is_running()
+                    ConfigManager.save_discovered_config(new_contexts)
+                    self._log_console(f"✅ Refreshed context: {self.current_context}")
+                    # Mostrar menú de servicios actualizado inmediatamente
+                    self.show_service_menu()
                 else:
                     self.current_context = None
                     self.current_pods = []
-                ConfigManager.save_discovered_config(new_contexts)
-                print(" ✅ Done!")
+                    ConfigManager.save_discovered_config(new_contexts)
+                    self._log_console("⚠️ Context no longer exists, please select a new one.")
+                    await self.select_context()
             else:
-                print(" ⚠️ No contexts found!")
+                self._log_console("⚠️ No contexts found!")
             await asyncio.sleep(0.5)
         elif choice == 'start':
             stopped_pods = [pod for pod in self.current_pods if not pod.is_running()]
             if not stopped_pods:
-                print("✅ All services are already running!")
+                self._log_console("✅ All services are already running!")
                 await asyncio.sleep(1)
                 return
 
-            print(f"🚀 Starting {len(stopped_pods)} service(s)...", end="", flush=True)
-
+            total = len(stopped_pods)
+            started_ok = 0
             for i, pod in enumerate(stopped_pods, 1):
-                self.clear_line()
-                print(f"🚀 Starting {i}/{len(stopped_pods)}: {pod.get_service()}...", end="", flush=True)
-                await pod.start()
-                pod._was_running = True
-                pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
-                self.pod_monitor.mark_user_started(pod_id)
-                self.notified_disconnected_pods.discard(pod_id)
+                pod._is_starting = True
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                msg = f"[{timestamp}] 🚀 Starting {i}/{total}: {pod.get_service()}..."
+                print(f"\r{msg}{' ' * 40}", end="", flush=True)
                 await asyncio.sleep(0.1)
-
-            self.clear_line()
-            print(f"✅ Started {len(stopped_pods)} service(s) successfully!{' '*20}")
+                success = await pod.start()
+                pod._is_starting = False
+                pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
+                if success:
+                    pod._was_running = True
+                    self.pod_monitor.mark_user_started(pod_id)
+                    self.notified_disconnected_pods.discard(pod_id)
+                    started_ok += 1
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    result_msg = f"[{timestamp}] ✅ Started {pod.get_service()} successfully!"
+                else:
+                    pod._was_running = False
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    result_msg = f"[{timestamp}] ❌ Failed to start {pod.get_service()}!"
+                print(f"\r{result_msg}{' ' * 40}", end="", flush=True)
+                await asyncio.sleep(0.7)
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"\r[{timestamp}] 🚀 Start completed: {started_ok}/{total} services started successfully.{' ' * 40}")
             await asyncio.sleep(1)
         elif choice == 'stop':
             running_pods = [pod for pod in self.current_pods if pod.is_running()]
+            total = len([pod for pod in self.current_pods])
             if not running_pods:
-                print("✅ All services are already stopped!")
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                print(f"\r[{timestamp}] 🛑 Stop completed: {total}/{total} services stopped successfully.{' ' * 40}")
                 await asyncio.sleep(1)
                 return
 
-            print(f"🛑 Stopping {len(running_pods)} service(s)...", end="", flush=True)
-
+            total = len(running_pods)
+            stopped_ok = 0
             for i, pod in enumerate(running_pods, 1):
-                self.clear_line()
-                print(f"🛑 Stopping {i}/{len(running_pods)}: {pod.get_service()}...", end="", flush=True)
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                msg = f"[{timestamp}] 🛑 Stopping {i}/{total}: {pod.get_service()}..."
+                print(f"\r{msg}{' ' * 40}", end="", flush=True)
                 pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
-                self.pod_monitor.mark_user_stopped(pod_id)
-                self.notified_disconnected_pods.discard(pod_id)
-                await asyncio.sleep(0.1)
-
+                success = pod.stop()
+                if success:
+                    pod._was_running = False
+                    self.pod_monitor.mark_user_stopped(pod_id)
+                    self.notified_disconnected_pods.discard(pod_id)
+                    stopped_ok += 1
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    result_msg = f"[{timestamp}] ✅ Stopped {pod.get_service()} successfully!"
+                else:
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    result_msg = f"[{timestamp}] ❌ Failed to stop {pod.get_service()}!"
+                print(f"\r{result_msg}{' ' * 40}", end="", flush=True)
+                await asyncio.sleep(0.7)
             self.stop_current_context()
-            self.clear_line()
-            print(f"✅ Stopped {len(running_pods)} service(s) successfully!{' '*20}")
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"\r[{timestamp}] 🛑 Stop completed: {stopped_ok}/{total} services stopped successfully.{' ' * 40}")
             await asyncio.sleep(1)
         elif choice.isdigit():
             index = int(choice) - 1
@@ -378,29 +419,46 @@ class KubeWireTUI:
                 service_name = pod.get_service()
 
                 if pod.is_running():
-                    print(f"🛑 Stopping {service_name}...", end="", flush=True)
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    msg = f"[{timestamp}] 🛑 Stopping {service_name}..."
+                    print(f"\r{msg}{' ' * 40}", end="", flush=True)
                     pod.stop()
                     pod._was_running = False
                     self.pod_monitor.mark_user_stopped(pod_id)
                     self.notified_disconnected_pods.discard(pod_id)
-                    print(f"\r✅ Stopped {service_name} successfully!{' '*20}")
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    msg = f"[{timestamp}] ✅ Stopped {service_name} successfully!"
+                    print(f"\r{msg}{' ' * 40}", end="", flush=True)
+                    await asyncio.sleep(0.8)
                 else:
-                    print(f"🚀 Starting {service_name}...", end="", flush=True)
-                    if await pod.start():
+                    pod._is_starting = True
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    msg = f"[{timestamp}] 🚀 Starting {service_name}..."
+                    print(f"\r{msg}{' ' * 40}", end="", flush=True)
+                    success = await pod.start()
+                    pod._is_starting = False
+                    if success:
                         pod._was_running = True
                         self.pod_monitor.mark_user_started(pod_id)
                         self.notified_disconnected_pods.discard(pod_id)
-                        print(f"\r✅ Started {service_name} successfully!{' '*20}")
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        msg = f"[{timestamp}] ✅ Started {service_name} successfully!"
                     else:
-                        print(f"\r❌ Failed to start {service_name}!{' '*20}")
+                        pod._was_running = False
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        msg = f"[{timestamp}] ❌ Failed to start {service_name}!"
+                    print(f"\r{msg}{' ' * 40}", end="", flush=True)
+                    await asyncio.sleep(0.8)
                 await asyncio.sleep(0.8)
             else:
-                print("❌ Invalid service number")
+                self._log_console("❌ Invalid service number")
                 await asyncio.sleep(1)
         elif choice == "":
             pass
         else:
-            print("❌ Invalid choice")
+            self._log_console("❌ Invalid choice")
             await asyncio.sleep(1)
 
     async def show_pod_logs(self, pod):
@@ -420,11 +478,17 @@ class KubeWireTUI:
         if terminal_cmd:
             try:
                 subprocess.Popen(terminal_cmd, shell=True)
-                print(f"📜 Opening logs for {service} in new window...")
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                print(f"[{timestamp}] 📜 Opening logs for {service} in new window...")
             except Exception as e:
-                print(f"❌ Failed to open logs: {e}")
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                print(f"[{timestamp}] ❌ Failed to open logs: {e}")
         else:
-            print("⚠️  Could not determine how to open new terminal window")
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] ⚠️  Could not determine how to open new terminal window")
 
         await asyncio.sleep(1)
 
@@ -548,3 +612,15 @@ class KubeWireTUI:
         if failed_pods:
             self.notify_failures(failed_pods)
         self.trigger_display_update()
+
+    def _is_pod_failed(self, pod):
+        pod_id = f"{pod.get_context()}/{pod.get_namespace()}/{pod.get_service()}"
+        previously_running = getattr(pod, "_was_running", False)
+        currently_running = pod.is_running()
+        starting = getattr(pod, "_is_starting", False)
+        if starting:
+            return False
+        recently_failed = False
+        if hasattr(self.pod_monitor, "recently_failed_pods"):
+            recently_failed = pod_id in self.pod_monitor.recently_failed_pods
+        return (previously_running and (recently_failed or not currently_running))
