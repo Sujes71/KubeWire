@@ -330,7 +330,6 @@ class KubeWireTUI:
                         pod._was_running = pod.is_running()
                     ConfigManager.save_discovered_config(new_contexts)
                     self._log_console(f"✅ Refreshed context: {self.current_context}")
-                    # Mostrar menú de servicios actualizado inmediatamente
                     self.show_service_menu()
                 else:
                     self.current_context = None

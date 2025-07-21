@@ -5,7 +5,6 @@ import sys
 from config.config_manager import ConfigManager
 from ui.tui import KubeWireTUI
 
-# --- Fix PATH for bundled app (py2app/PyInstaller) ---
 extra_paths = [
     "/usr/local/bin",
     "/opt/homebrew/bin",
@@ -19,7 +18,6 @@ for p in extra_paths:
     if p not in current_path:
         current_path += os.pathsep + p
 os.environ["PATH"] = current_path
-# -----------------------------------------------------
 
 MODE = "gui"
 

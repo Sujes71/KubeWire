@@ -52,6 +52,11 @@ class KubeWireGUI:
         self.root.attributes('-topmost', True)
         self.root.after(10, lambda: self.root.attributes('-topmost', False))
 
+        self.root.bind('<FocusOut>', self.on_root_focus_out)
+        self.root.bind('<FocusIn>', self.on_root_focus_in)
+        self.root.bind('<Unmap>', self.on_root_unmap)
+        self.root.bind('<Map>', self.on_root_map)
+
 
         try:
             root_dir = os.path.dirname(os.path.dirname(__file__))
@@ -92,11 +97,49 @@ class KubeWireGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         self.initialize_app()
-        
+
+
+    def on_root_focus_out(self, event):
+        if event.widget == self.root:
+            if hasattr(self, '_loading_overlay') and self._loading_overlay:
+                self.root.after(50, self._check_focus_and_hide_overlay)
+
+    def on_root_focus_in(self, event):
+        if event.widget == self.root:
+            if hasattr(self, '_loading_overlay') and self._loading_overlay:
+                self._loading_overlay.deiconify()
+                self._update_overlay_geometry()
+
+    def on_root_unmap(self, event):
+        if hasattr(self, '_loading_overlay') and self._loading_overlay:
+            self._loading_overlay.withdraw()
+
+    def on_root_map(self, event):
+        if hasattr(self, '_loading_overlay') and self._loading_overlay:
+            self._loading_overlay.deiconify()
+            self._update_overlay_geometry()
+
+    def _update_overlay_geometry(self):
+        if hasattr(self, '_loading_overlay') and self._loading_overlay:
+            try:
+                w, h = self.root.winfo_width(), self.root.winfo_height()
+                x, y = self.root.winfo_x(), self.root.winfo_y()
+                self._loading_overlay.geometry(f"{w}x{h}+{x}+{y}")
+            except:
+                pass
 
     def init_logs_manager(self):
-        """Agregar esto al __init__ de KubeWireGUI"""
         self.logs_manager = LogsManager(self)
+
+    def _check_focus_and_hide_overlay(self):
+        try:
+            focused_widget = self.root.focus_get()
+            if focused_widget is None:
+                if hasattr(self, '_loading_overlay') and self._loading_overlay:
+                    self._loading_overlay.withdraw()
+        except:
+            if hasattr(self, '_loading_overlay') and self._loading_overlay:
+                self._loading_overlay.withdraw()
 
     def create_logs_frame(self):
         self.logs_frame = ttk.LabelFrame(self.main_frame, text="📜 Logs", padding="5")
@@ -144,7 +187,6 @@ class KubeWireGUI:
         style.configure('Stopped.TLabel', foreground=SOLARIZED['red'])
         style.configure('Failed.TLabel', foreground=SOLARIZED['orange'])
 
-        # Mejorar Treeview: fuente más grande, centrado, colores y selección
         style.configure('Treeview',
                         background=SOLARIZED['base02'],
                         foreground=SOLARIZED['base0'],
@@ -257,7 +299,6 @@ class KubeWireGUI:
         columns = ('Service', 'Port', 'Namespace', 'Status')
         self.services_tree = ttk.Treeview(services_frame, columns=columns, show='headings', height=15, style='Treeview')
 
-        # Centrar todas las columnas y encabezados
         for col in columns:
             self.services_tree.heading(col, text=col, anchor='center', command=lambda c=col: self.sort_treeview(c))
             self.services_tree.column(col, anchor='center')
@@ -1136,9 +1177,7 @@ class KubeWireGUI:
         self._loading_overlay.attributes("-alpha", 0.85)
         self._loading_overlay.configure(bg=SOLARIZED['base02'])
 
-        w, h = self.root.winfo_width(), self.root.winfo_height()
-        x, y = self.root.winfo_x(), self.root.winfo_y()
-        self._loading_overlay.geometry(f"{w}x{h}+{x}+{y}")
+        self._update_overlay_geometry()
 
         frame = ttk.Frame(self._loading_overlay, padding=20)
         frame.place(relx=0.5, rely=0.5, anchor="center")
@@ -1153,17 +1192,22 @@ class KubeWireGUI:
         self._animate_spinner()
 
         self._loading_overlay.transient(self.root)
-        self._loading_overlay.attributes('-topmost', True)
-        self.root.focus_force()
 
-        self._loading_overlay.transient(self.root)
-        self._loading_overlay.grab_set()
+        self._loading_overlay.attributes('-topmost', True)
+        self.root.after(100, lambda: self._loading_overlay.attributes('-topmost', False) if self._loading_overlay else None)
+
+        self._loading_overlay.bind('<FocusOut>', self._on_overlay_focus_out)
+
+    def _on_overlay_focus_out(self, event):
+        self.root.after(50, self._check_focus_and_hide_overlay)
 
     def hide_loading_overlay(self):
         if hasattr(self, "_loading_overlay") and self._loading_overlay:
             self._spinner_running = False
-            self._loading_overlay.grab_release()
-            self._loading_overlay.destroy()
+            try:
+                self._loading_overlay.destroy()
+            except:
+                pass
             self._loading_overlay = None
 
     def _animate_spinner(self):
@@ -1182,7 +1226,6 @@ class KubeWireGUI:
             print(full_message, end='')
         except Exception:
             pass
-        # Ya no se imprime en self.logs_text aquí, solo en terminal
 
     def append_service_log(self, line):
         """Agrega una línea de log de servicio al widget de logs"""
@@ -1224,14 +1267,11 @@ class KubeWireGUI:
                 self.log_message(f"❌ Error stopping {pod.get_service()}: {e}")
 
     def on_closing(self):
-        """Cierre seguro: solo ejecuta una vez y destruye la ventana."""
         if hasattr(self, '_closed') and self._closed:
             return
         self._closed = True
-        # Elimina el log aquí, lo hará el main si corresponde
         self.running = False
-        
-        # Detener streaming de logs
+
         if hasattr(self, 'logs_manager'):
             self.logs_manager.stop_current_streaming()
         
@@ -1250,19 +1290,15 @@ class KubeWireGUI:
 
     def set_ui_enabled(self, enabled: bool):
         state = "normal" if enabled else "disabled"
-        # Treeview
         self.services_tree.configure(selectmode="browse" if enabled else "none")
-        # Botones de la barra superior
         for child in self.toggle_logs_button.master.winfo_children():
             if isinstance(child, ttk.Button):
                 child.state(["!disabled"] if enabled else ["disabled"])
-        # Botones de la parte inferior
         for child in self.main_frame.winfo_children():
             if isinstance(child, ttk.Frame):
                 for btn in child.winfo_children():
                     if isinstance(btn, ttk.Button):
                         btn.state(["!disabled"] if enabled else ["disabled"])
-        # Combobox
         self.context_combobox.configure(state="readonly" if enabled else "disabled")
 
     def _on_root_focus_out(self, event):

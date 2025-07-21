@@ -14,25 +14,19 @@ class LogsManager:
         self._lock = threading.Lock()
     
     def show_pod_logs_async(self, pod):
-        """Muestra los logs de un pod en tiempo real"""
-        # Detener cualquier streaming anterior
         self.stop_current_streaming()
-        
-        # Limpiar logs anteriores SOLO en el widget de logs
+
         self.gui.clear_logs()
-        
-        # Mostrar panel de logs si está oculto
+
         if not self.gui.logs_frame.winfo_ismapped():
             self.gui.logs_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(5, 0))
             self.gui.main_frame.rowconfigure(3, weight=1)
             self.gui.toggle_logs_button.config(text="🔽 Hide logs")
-        
-        # Iniciar streaming en hilo separado
+
         self.is_streaming = True
         self._stream_thread = threading.Thread(target=self._stream_logs, args=(pod,), daemon=True)
         self._stream_thread.start()
-        
-        # Iniciar procesamiento de cola de logs
+
         self.gui.root.after(100, self._process_log_queue)
     
     def _stream_logs(self, pod):
