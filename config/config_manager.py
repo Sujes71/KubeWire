@@ -13,34 +13,21 @@ from pods import Pod, PodUI
 class ConfigManager:
     @staticmethod
     def get_config_path() -> Path:
-        """
-        Obtiene la ruta del archivo de configuración.
-        Maneja tanto el entorno de desarrollo como el ejecutable de PyInstaller.
-        """
         env_var = "KubeWire_CONFIG"
         if env_var in os.environ:
             return Path(os.environ[env_var]) / "config.yml"
 
-        # Detectar si estamos ejecutando desde PyInstaller
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # Ejecutándose desde PyInstaller
-            # sys._MEIPASS es la carpeta temporal donde PyInstaller extrae los archivos
-            # Pero queremos que el config.yml persista, así que lo ponemos en una ubicación permanente
-
             if sys.platform == "win32":
-                # Windows: usar AppData
                 config_dir = Path.home() / "AppData" / "Local" / "KubeWire"
             elif sys.platform == "darwin":
-                # macOS: usar Application Support
                 config_dir = Path.home() / "Library" / "Application Support" / "KubeWire"
             else:
-                # Linux: usar .config
                 config_dir = Path.home() / ".config" / "KubeWire"
 
             config_dir.mkdir(parents=True, exist_ok=True)
             return config_dir / "config.yml"
         else:
-            # Entorno de desarrollo - usar la carpeta del proyecto
             script_dir = Path(__file__).parent
             config_dir = script_dir / "config"
             config_dir.mkdir(parents=True, exist_ok=True)
@@ -48,15 +35,9 @@ class ConfigManager:
 
     @staticmethod
     def get_resource_path(relative_path: str) -> Path:
-        """
-        Obtiene la ruta de un recurso incluido en el ejecutable.
-        Para archivos que están empaquetados con --add-data.
-        """
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # PyInstaller - usar la carpeta temporal
             return Path(sys._MEIPASS) / relative_path
         else:
-            # Desarrollo - usar ruta relativa al script
             return Path(__file__).parent / relative_path
 
     @staticmethod
@@ -182,7 +163,6 @@ class ConfigManager:
 
     @staticmethod
     def get_config_info():
-        """Método de utilidad para debug"""
         config_path = ConfigManager.get_config_path()
         is_frozen = getattr(sys, 'frozen', False)
 
