@@ -1076,6 +1076,7 @@ class KubeWireGUI:
         self.update_status("Done")
 
     def refresh_contexts(self):
+        self.set_ui_enabled(False)
         self.show_loading_overlay("Updating contexts...")
         self.log_message("🔄 Updating configuration...")
         threading.Thread(target=self._refresh_contexts_async, daemon=True).start()
@@ -1097,9 +1098,12 @@ class KubeWireGUI:
                 self.root.after(0, self.hide_loading_overlay)
             else:
                 self.root.after(0, self.log_message, "⚠️ No accessible contexts were found")
+                self.root.after(0, self.hide_loading_overlay)
         except Exception as e:
             self.root.after(0, self.log_message, f"❌ Error at updating: {e}")
             self.root.after(0, self.hide_loading_overlay)
+        finally:
+            self.root.after(0, self.set_ui_enabled, True)
 
     def show_loading_overlay(self, text="Cargando..."):
         if hasattr(self, "_loading_overlay") and self._loading_overlay:
@@ -1216,3 +1220,20 @@ class KubeWireGUI:
 
     def run(self):
         self.root.mainloop()
+
+    def set_ui_enabled(self, enabled: bool):
+        state = "normal" if enabled else "disabled"
+        # Treeview
+        self.services_tree.configure(selectmode="browse" if enabled else "none")
+        # Botones de la barra superior
+        for child in self.toggle_logs_button.master.winfo_children():
+            if isinstance(child, ttk.Button):
+                child.state(["!disabled"] if enabled else ["disabled"])
+        # Botones de la parte inferior
+        for child in self.main_frame.winfo_children():
+            if isinstance(child, ttk.Frame):
+                for btn in child.winfo_children():
+                    if isinstance(btn, ttk.Button):
+                        btn.state(["!disabled"] if enabled else ["disabled"])
+        # Combobox
+        self.context_combobox.configure(state="readonly" if enabled else "disabled")
